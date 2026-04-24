@@ -8,10 +8,196 @@ datasource db {
 }
 
 model User {
-  id            String   @id @default(uuid())
-  fullName      String
-  organization  String
-  email         String   @unique
-  password      String
-  createdAt     DateTime @default(now())
+  id        String   @id @default(uuid())
+  email     String   @unique
+  fullName  String?
+  avatarUrl String?
+  password  String?
+  googleId  String?  @unique
+  createdAt DateTime @default(now())
+
+  ownedCompanies    Company[]          @relation("CompanyOwner")
+  userCompanies     UserCompany[]
+  ownedControls     Control[]          @relation("ControlOwner")
+  sentInvites       Invite[]           @relation("InvitedBy")
+  testPlanOverrides TestPlanOverride[] @relation("TestPlanTester")
+  testerControls    Control[]          @relation("ControlTester")
+  testResults       TestResult[]       @relation("TestResultTester")
+
+  @@map("users")
+}
+
+model Company {
+  id                 String   @id @default(uuid())
+  name               String
+  slug               String   @unique
+  ownerId            String
+  financialYearStart Int      @default(1)
+  createdAt          DateTime @default(now())
+
+  owner             User               @relation("CompanyOwner", fields: [ownerId], references: [id])
+  userCompanies     UserCompany[]
+  countries         Country[]
+  controls          Control[]
+  invites           Invite[]
+  testPlanOverrides TestPlanOverride[]
+  TestResult        TestResult[]
+
+  @@map("companies")
+}
+
+model UserCompany {
+  id        String   @id @default(uuid())
+  userId    String
+  companyId String
+  role      Role     @default(viewer)
+  invitedBy String?
+  joinedAt  DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id])
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@unique([userId, companyId])
+  @@map("user_company")
+}
+
+enum Role {
+  admin
+  control_owner
+  tester
+  viewer
+}
+
+model Country {
+  id        String   @id @default(uuid())
+  companyId String
+  name      String
+  code      String
+  createdAt DateTime @default(now())
+
+  company     Company      @relation(fields: [companyId], references: [id])
+  controls    Control[]
+  testResults TestResult[]
+
+  @@unique([companyId, code])
+  @@map("countries")
+}
+
+model Control {
+  id         String        @id @default(uuid())
+  companyId  String
+  countryId  String
+  controlId  String
+  name       String
+  domain     String
+  risk       String
+  frequency  Frequency
+  ownerId    String?
+  testerId   String?
+  nature     Nature
+  type       ControlType
+  testDueDay Int           @default(15)
+  status     ControlStatus @default(active)
+  createdAt  DateTime      @default(now())
+
+  company           Company            @relation(fields: [companyId], references: [id])
+  country           Country            @relation(fields: [countryId], references: [id])
+  owner             User?              @relation("ControlOwner", fields: [ownerId], references: [id])
+  tester            User?              @relation("ControlTester", fields: [testerId], references: [id])
+  testPlanOverrides TestPlanOverride[]
+  testResults       TestResult[]
+
+  @@unique([companyId, controlId])
+  @@map("controls")
+}
+
+enum Nature {
+  manual
+  it_dependent_manual
+}
+
+enum ControlType {
+  preventive
+  detective
+}
+
+enum Frequency {
+  monthly
+  quarterly
+  annual
+  as_needed
+}
+
+enum ControlStatus {
+  active
+  inactive
+}
+
+model TestResult {
+  id          String           @id @default(uuid())
+  companyId   String
+  countryId   String
+  controlId   String
+  testerId    String
+  period      String
+  population  Int
+  sampleSize  Int
+  exceptions  Int
+  result      TestResultStatus
+  evidenceUrl String?
+  testedAt    DateTime         @default(now())
+  createdAt   DateTime         @default(now())
+
+  company Company @relation(fields: [companyId], references: [id])
+  country Country @relation(fields: [countryId], references: [id])
+  control Control @relation(fields: [controlId], references: [id])
+  tester  User    @relation("TestResultTester", fields: [testerId], references: [id])
+
+  @@unique([companyId, controlId, period])
+  @@map("test_results")
+}
+
+enum TestResultStatus {
+  pass
+  exception
+  fail
+}
+
+model Invite {
+  id        String       @id @default(uuid())
+  companyId String
+  email     String
+  role      Role
+  token     String       @unique @default(uuid())
+  status    InviteStatus @default(pending)
+  invitedBy String
+  createdAt DateTime     @default(now())
+  expiresAt DateTime
+
+  company Company @relation(fields: [companyId], references: [id])
+  inviter User    @relation("InvitedBy", fields: [invitedBy], references: [id])
+
+  @@map("invites")
+}
+
+enum InviteStatus {
+  pending
+  accepted
+  expired
+}
+
+model TestPlanOverride {
+  id        String   @id @default(uuid())
+  companyId String
+  controlId String
+  testerId  String
+  period    String
+  createdAt DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id])
+  control Control @relation(fields: [controlId], references: [id])
+  tester  User    @relation("TestPlanTester", fields: [testerId], references: [id])
+
+  @@unique([companyId, controlId, period])
+  @@map("test_plan_overrides")
 }
