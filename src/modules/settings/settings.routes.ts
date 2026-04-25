@@ -9,6 +9,11 @@ import {
   createCountry,
   deleteCountry,
   updateCompany,
+  getMembers,
+  updateMemberRole,
+  removeMember,
+  getProcessOwners,
+  reassignOwner,
 } from "./settings.controller";
 
 const router = Router();
@@ -29,5 +34,12 @@ router.delete("/countries/:id", deleteCountry);
 
 // Company
 router.put("/company", updateCompany);
+
+router.get("/members", getMembers);
+router.put("/members/:id/role", updateMemberRole);
+router.delete("/members/:id", removeMember);
+
+router.get("/process-owners", getProcessOwners);
+router.put("/process-owners/:id", reassignOwner);
 
 export default router;

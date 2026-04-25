@@ -23,6 +23,9 @@ model User {
   testPlanOverrides TestPlanOverride[] @relation("TestPlanTester")
   testerControls    Control[]          @relation("ControlTester")
   testResults       TestResult[]       @relation("TestResultTester")
+  ownedIssues       Issue[]            @relation("IssueOwner")
+  ownedActions      Action[]           @relation("ActionOwner")
+  auditLogs         AuditLog[]
 
   @@map("users")
 }
@@ -42,6 +45,9 @@ model Company {
   invites           Invite[]
   testPlanOverrides TestPlanOverride[]
   TestResult        TestResult[]
+  issues            Issue[]
+  actions           Action[]
+  auditLogs         AuditLog[]
 
   @@map("companies")
 }
@@ -78,6 +84,7 @@ model Country {
   company     Company      @relation(fields: [companyId], references: [id])
   controls    Control[]
   testResults TestResult[]
+  issues      Issue[]
 
   @@unique([companyId, code])
   @@map("countries")
@@ -106,6 +113,7 @@ model Control {
   tester            User?              @relation("ControlTester", fields: [testerId], references: [id])
   testPlanOverrides TestPlanOverride[]
   testResults       TestResult[]
+  issues            Issue[]
 
   @@unique([companyId, controlId])
   @@map("controls")
@@ -124,6 +132,7 @@ enum ControlType {
 enum Frequency {
   monthly
   quarterly
+  semi_annually
   annual
   as_needed
 }
@@ -134,26 +143,32 @@ enum ControlStatus {
 }
 
 model TestResult {
-  id          String           @id @default(uuid())
-  companyId   String
-  countryId   String
-  controlId   String
-  testerId    String
-  period      String
-  population  Int
-  sampleSize  Int
-  exceptions  Int
-  result      TestResultStatus
-  evidenceUrl String?
-  testedAt    DateTime         @default(now())
-  createdAt   DateTime         @default(now())
+  id            String           @id @default(uuid())
+  testId        String
+  companyId     String
+  countryId     String
+  controlId     String
+  testerId      String
+  period        String
+  testName      String
+  population    Int
+  sampleSize    Int
+  exceptions    Int
+  result        TestResultStatus
+  testProcedure String?
+  evidenceUrl   String?
+  comments      String?
+  testedAt      DateTime         @default(now())
+  createdAt     DateTime         @default(now())
 
   company Company @relation(fields: [companyId], references: [id])
   country Country @relation(fields: [countryId], references: [id])
   control Control @relation(fields: [controlId], references: [id])
   tester  User    @relation("TestResultTester", fields: [testerId], references: [id])
+  issues  Issue[]
 
   @@unique([companyId, controlId, period])
+  @@unique([companyId, testId])
   @@map("test_results")
 }
 
@@ -200,4 +215,83 @@ model TestPlanOverride {
 
   @@unique([companyId, controlId, period])
   @@map("test_plan_overrides")
+}
+
+model Issue {
+  id           String      @id @default(uuid())
+  issueId      String
+  companyId    String
+  countryId    String
+  controlId    String
+  testResultId String?
+  description  String
+  severity     Severity    @default(medium)
+  ownerId      String?
+  dueDate      DateTime?
+  status       IssueStatus @default(open)
+  createdAt    DateTime    @default(now())
+
+  company    Company     @relation(fields: [companyId], references: [id])
+  country    Country     @relation(fields: [countryId], references: [id])
+  control    Control     @relation(fields: [controlId], references: [id])
+  testResult TestResult? @relation(fields: [testResultId], references: [id])
+  owner      User?       @relation("IssueOwner", fields: [ownerId], references: [id])
+  actions    Action[]
+
+  @@unique([companyId, issueId])
+  @@map("issues")
+}
+
+model Action {
+  id          String       @id @default(uuid())
+  actionId    String
+  issueId     String
+  companyId   String
+  description String
+  ownerId     String?
+  dueDate     DateTime?
+  progress    Int          @default(0)
+  status      ActionStatus @default(in_progress)
+  lastUpdate  DateTime     @default(now())
+  createdAt   DateTime     @default(now())
+
+  issue   Issue   @relation(fields: [issueId], references: [id])
+  company Company @relation(fields: [companyId], references: [id])
+  owner   User?   @relation("ActionOwner", fields: [ownerId], references: [id])
+
+  @@unique([companyId, actionId])
+  @@map("actions")
+}
+
+enum Severity {
+  low
+  medium
+  high
+}
+
+enum IssueStatus {
+  open
+  in_progress
+  closed
+}
+
+enum ActionStatus {
+  in_progress
+  completed
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  companyId  String
+  userId     String
+  action     String
+  entityType String
+  entityId   String
+  detail     String?
+  createdAt  DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
 }
