@@ -1,11 +1,11 @@
 import { Response } from "express";
-import { AuthRequest } from "../../middleware/authenticate";
+import { Request } from "express";
 import { sendEmail } from "../../utils/email";
 import { prisma } from "../../config/prisma";
 import { hashPassword } from "../../utils/password";
 
 export const sendInvite = async (
-  req: AuthRequest,
+  req: Request,
   res: Response
 ): Promise<void> => {
   try {
@@ -109,7 +109,7 @@ export const sendInvite = async (
 };
 
 export const acceptInvite = async (
-  req: AuthRequest,
+  req: Request,
   res: Response
 ): Promise<void> => {
   try {
@@ -190,7 +190,7 @@ export const acceptInvite = async (
 };
 
 export const getInvites = async (
-  req: AuthRequest,
+  req: Request,
   res: Response
 ): Promise<void> => {
   try {
@@ -217,7 +217,7 @@ export const getInvites = async (
 };
 
 export const revokeInvite = async (
-  req: AuthRequest,
+  req: Request,
   res: Response
 ): Promise<void> => {
   try {

@@ -1,5 +1,5 @@
 import { Response } from "express";
-import { AuthRequest } from "../../middleware/authenticate";
+import { Request } from "express";
 import { prisma } from "../../config/prisma";
 import { logAudit } from "../../utils/auditLog";
 
@@ -23,10 +23,7 @@ const computeRAG = (dueDate: Date | null, status: string): string => {
   return "green";
 };
 
-export const getIssues = async (
-  req: AuthRequest,
-  res: Response
-): Promise<void> => {
+export const getIssues = async (req: Request, res: Response): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
     const { country_id, status } = req.query as {
@@ -69,7 +66,7 @@ export const getIssues = async (
 };
 
 export const createIssue = async (
-  req: AuthRequest,
+  req: Request,
   res: Response
 ): Promise<void> => {
   try {
@@ -133,7 +130,7 @@ export const createIssue = async (
 };
 
 export const updateIssue = async (
-  req: AuthRequest,
+  req: Request,
   res: Response
 ): Promise<void> => {
   try {
@@ -178,10 +175,7 @@ export const updateIssue = async (
   }
 };
 
-export const getIssue = async (
-  req: AuthRequest,
-  res: Response
-): Promise<void> => {
+export const getIssue = async (req: Request, res: Response): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
     const { id } = req.params as { id: string };

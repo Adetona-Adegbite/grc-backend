@@ -8,7 +8,6 @@ export interface TokenPayload {
   companyId: string;
   role: string;
 }
-
 export const generateAccessToken = (payload: TokenPayload): string => {
   return jwt.sign(payload, ACCESS_TOKEN_SECRET, { expiresIn: "15m" });
 };

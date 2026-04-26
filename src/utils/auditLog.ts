@@ -11,7 +11,8 @@ interface AuditLogParams {
     | "control"
     | "country"
     | "invite"
-    | "user";
+    | "user"
+    | "company";
   entityId: string;
   detail?: string;
 }

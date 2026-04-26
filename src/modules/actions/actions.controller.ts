@@ -1,5 +1,5 @@
 import { Response } from "express";
-import { AuthRequest } from "../../middleware/authenticate";
+import { Request } from "express";
 import { prisma } from "../../config/prisma";
 import { logAudit } from "../../utils/auditLog";
 
@@ -9,7 +9,7 @@ const generateActionId = async (companyId: string): Promise<string> => {
 };
 
 export const getActions = async (
-  req: AuthRequest,
+  req: Request,
   res: Response
 ): Promise<void> => {
   try {
@@ -50,7 +50,7 @@ export const getActions = async (
 };
 
 export const createAction = async (
-  req: AuthRequest,
+  req: Request,
   res: Response
 ): Promise<void> => {
   try {
@@ -107,7 +107,7 @@ export const createAction = async (
 };
 
 export const updateAction = async (
-  req: AuthRequest,
+  req: Request,
   res: Response
 ): Promise<void> => {
   try {
@@ -168,7 +168,7 @@ export const updateAction = async (
 };
 
 export const deleteAction = async (
-  req: AuthRequest,
+  req: Request,
   res: Response
 ): Promise<void> => {
   try {

@@ -1,5 +1,5 @@
 import { Response } from "express";
-import { AuthRequest } from "../../middleware/authenticate";
+import { Request } from "express";
 import { prisma } from "../../config/prisma";
 
 const AUDIT_STEPS = [
@@ -9,10 +9,7 @@ const AUDIT_STEPS = [
   "Document findings and conclusions",
 ];
 
-export const getAudit = async (
-  req: AuthRequest,
-  res: Response
-): Promise<void> => {
+export const getAudit = async (req: Request, res: Response): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
     const { country_id } = req.query as { country_id: string };

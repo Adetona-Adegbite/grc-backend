@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { Response, Request } from "express";
 import { hashPassword, comparePassword } from "../../utils/password";
 import {
   generateAccessToken,
@@ -9,7 +9,6 @@ import {
 } from "../../utils/jwt";
 import { prisma } from "../../config/prisma";
 import { AuthRequest } from "../../middleware/authenticate";
-
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password, fullName, companyName } = req.body;

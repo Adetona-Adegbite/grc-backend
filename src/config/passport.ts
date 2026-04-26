@@ -39,7 +39,7 @@ passport.use(
               include: { userCompanies: true },
             });
           }
-          return done(null, user);
+          return done(null, user as any);
         }
 
         // New user — create without company for now
@@ -53,7 +53,7 @@ passport.use(
           include: { userCompanies: true },
         });
 
-        return done(null, newUser);
+        return done(null, newUser as any);
       } catch (error) {
         return done(error, undefined);
       }

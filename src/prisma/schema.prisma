@@ -229,6 +229,7 @@ model Issue {
   ownerId      String?
   dueDate      DateTime?
   status       IssueStatus @default(open)
+  evidenceUrl  String?
   createdAt    DateTime    @default(now())
 
   company    Company     @relation(fields: [companyId], references: [id])

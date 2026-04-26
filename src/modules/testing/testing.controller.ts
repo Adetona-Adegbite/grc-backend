@@ -1,5 +1,5 @@
 import { Response } from "express";
-import { AuthRequest } from "../../middleware/authenticate";
+import { Request } from "express";
 import { createIssueHelper } from "../../utils/createIssue";
 import { prisma } from "../../config/prisma";
 import { logAudit } from "../../utils/auditLog";
@@ -11,7 +11,7 @@ const generateTestId = async (companyId: string): Promise<string> => {
 };
 
 export const getAvailableControls = async (
-  req: AuthRequest,
+  req: Request,
   res: Response
 ): Promise<void> => {
   try {
@@ -109,10 +109,7 @@ export const getAvailableControls = async (
   }
 };
 
-export const logTest = async (
-  req: AuthRequest,
-  res: Response
-): Promise<void> => {
+export const logTest = async (req: Request, res: Response): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
     const testerId = req.user!.userId;
@@ -230,7 +227,7 @@ export const logTest = async (
 };
 
 export const getTestResults = async (
-  req: AuthRequest,
+  req: Request,
   res: Response
 ): Promise<void> => {
   try {
@@ -263,7 +260,7 @@ export const getTestResults = async (
 };
 
 export const getTestHistory = async (
-  req: AuthRequest,
+  req: Request,
   res: Response
 ): Promise<void> => {
   try {

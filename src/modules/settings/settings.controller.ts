@@ -1,12 +1,12 @@
 import { Response } from "express";
-import { AuthRequest } from "../../middleware/authenticate";
+import { Request } from "express";
 import { prisma } from "../../config/prisma";
 import { logAudit } from "../../utils/auditLog";
 
 // ─── Controls ───────────────────────────────────────────
 
 export const getControls = async (
-  req: AuthRequest,
+  req: Request,
   res: Response
 ): Promise<void> => {
   try {
@@ -25,7 +25,7 @@ export const getControls = async (
 };
 
 export const createControl = async (
-  req: AuthRequest,
+  req: Request,
   res: Response
 ): Promise<void> => {
   try {
@@ -85,7 +85,14 @@ export const createControl = async (
         status: (status as any) || "active",
       },
     });
-
+    await logAudit({
+      companyId,
+      userId: req.user!.userId,
+      action: "Control created",
+      entityType: "control",
+      entityId: control.id,
+      detail: `${control.controlId} — ${control.name}`,
+    });
     res.status(201).json({ data: control, error: null });
   } catch (error) {
     res.status(500).json({ data: null, error: "Internal server error" });
@@ -93,7 +100,7 @@ export const createControl = async (
 };
 
 export const updateControl = async (
-  req: AuthRequest,
+  req: Request,
   res: Response
 ): Promise<void> => {
   try {
@@ -166,7 +173,7 @@ export const updateControl = async (
   }
 };
 export const deleteControl = async (
-  req: AuthRequest,
+  req: Request,
   res: Response
 ): Promise<void> => {
   try {
@@ -183,7 +190,14 @@ export const deleteControl = async (
     }
 
     await prisma.control.delete({ where: { id } });
-
+    await logAudit({
+      companyId,
+      userId: req.user!.userId,
+      action: "Control deleted",
+      entityType: "control",
+      entityId: id,
+      detail: `${existing.controlId} — ${existing.name}`,
+    });
     res.status(200).json({ data: { message: "Control deleted" }, error: null });
   } catch (error) {
     res.status(500).json({ data: null, error: "Internal server error" });
@@ -193,7 +207,7 @@ export const deleteControl = async (
 // ─── Countries ───────────────────────────────────────────
 
 export const getCountries = async (
-  req: AuthRequest,
+  req: Request,
   res: Response
 ): Promise<void> => {
   try {
@@ -211,7 +225,7 @@ export const getCountries = async (
 };
 
 export const createCountry = async (
-  req: AuthRequest,
+  req: Request,
   res: Response
 ): Promise<void> => {
   try {
@@ -237,7 +251,14 @@ export const createCountry = async (
     const country = await prisma.country.create({
       data: { companyId, name, code },
     });
-
+    await logAudit({
+      companyId,
+      userId: req.user!.userId,
+      action: "Country added",
+      entityType: "country",
+      entityId: country.id,
+      detail: `${country.name} — ${country.code}`,
+    });
     res.status(201).json({ data: country, error: null });
   } catch (error) {
     res.status(500).json({ data: null, error: "Internal server error" });
@@ -245,7 +266,7 @@ export const createCountry = async (
 };
 
 export const deleteCountry = async (
-  req: AuthRequest,
+  req: Request,
   res: Response
 ): Promise<void> => {
   try {
@@ -262,7 +283,14 @@ export const deleteCountry = async (
     }
 
     await prisma.country.delete({ where: { id } });
-
+    await logAudit({
+      companyId,
+      userId: req.user!.userId,
+      action: "Country deleted",
+      entityType: "country",
+      entityId: id,
+      detail: `${existing.name} — ${existing.code}`,
+    });
     res.status(200).json({ data: { message: "Country deleted" }, error: null });
   } catch (error) {
     res.status(500).json({ data: null, error: "Internal server error" });
@@ -272,7 +300,7 @@ export const deleteCountry = async (
 // ─── Company ───────────────────────────────────────────
 
 export const updateCompany = async (
-  req: AuthRequest,
+  req: Request,
   res: Response
 ): Promise<void> => {
   try {
@@ -294,7 +322,14 @@ export const updateCompany = async (
       where: { id: companyId },
       data: { name, financialYearStart },
     });
-
+    await logAudit({
+      companyId,
+      userId: req.user!.userId,
+      action: "Company updated",
+      entityType: "control",
+      entityId: companyId,
+      detail: `Financial year start: ${financialYearStart}`,
+    });
     res.status(200).json({ data: company, error: null });
   } catch (error) {
     res.status(500).json({ data: null, error: "Internal server error" });
@@ -302,7 +337,7 @@ export const updateCompany = async (
 };
 
 export const getMembers = async (
-  req: AuthRequest,
+  req: Request,
   res: Response
 ): Promise<void> => {
   try {
@@ -340,7 +375,7 @@ export const getMembers = async (
 };
 
 export const updateMemberRole = async (
-  req: AuthRequest,
+  req: Request,
   res: Response
 ): Promise<void> => {
   try {
@@ -380,7 +415,14 @@ export const updateMemberRole = async (
       where: { id: existing.id },
       data: { role: role as any },
     });
-
+    await logAudit({
+      companyId,
+      userId: req.user!.userId,
+      action: "Member role updated",
+      entityType: "user",
+      entityId: id,
+      detail: `New role: ${role}`,
+    });
     res.status(200).json({ data: updated, error: null });
   } catch (error) {
     res.status(500).json({ data: null, error: "Internal server error" });
@@ -388,7 +430,7 @@ export const updateMemberRole = async (
 };
 
 export const removeMember = async (
-  req: AuthRequest,
+  req: Request,
   res: Response
 ): Promise<void> => {
   try {
@@ -411,7 +453,14 @@ export const removeMember = async (
     }
 
     await prisma.userCompany.delete({ where: { id: existing.id } });
-
+    await logAudit({
+      companyId,
+      userId: req.user!.userId,
+      action: "Member removed",
+      entityType: "user",
+      entityId: id,
+      detail: `User ${id} removed from company`,
+    });
     res.status(200).json({ data: { message: "Member removed" }, error: null });
   } catch (error) {
     res.status(500).json({ data: null, error: "Internal server error" });
@@ -421,7 +470,7 @@ export const removeMember = async (
 // ─── Process Owners ───────────────────────────────────────────
 
 export const getProcessOwners = async (
-  req: AuthRequest,
+  req: Request,
   res: Response
 ): Promise<void> => {
   try {
@@ -453,7 +502,7 @@ export const getProcessOwners = async (
 };
 
 export const reassignOwner = async (
-  req: AuthRequest,
+  req: Request,
   res: Response
 ): Promise<void> => {
   try {
