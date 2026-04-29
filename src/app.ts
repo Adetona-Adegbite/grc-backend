@@ -34,13 +34,13 @@ app.use(
 
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // max 100 requests per 15 minutes
+  max: 1000, // max 100 requests per 15 minutes
   message: { data: null, error: "Too many requests, please try again later" },
 });
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10, // stricter limit for auth routes
+  max: 50, // stricter limit for auth routes
   message: { data: null, error: "Too many attempts, please try again later" },
 });
 
