@@ -49,9 +49,11 @@ export const getCalendar = async (
   try {
     const companyId = req.user!.companyId;
     const { country_id, year } = req.query as {
-      country_id: string;
+      country_id?: string;
       year?: string;
     };
+    const countryWhere =
+      country_id && country_id !== "all" ? { countryId: country_id } : {};
 
     if (!country_id) {
       res.status(400).json({ data: null, error: "country_id is required" });
@@ -77,7 +79,7 @@ export const getCalendar = async (
     const controls = await prisma.control.findMany({
       where: {
         companyId,
-        countryId: country_id,
+        ...countryWhere,
         status: "active",
         ownerId: { not: null },
       },

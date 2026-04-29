@@ -41,17 +41,17 @@ export const sendInvite = async (
       }
     }
 
-    // Check if there's already a pending invite
-    const existingInvite = await prisma.invite.findFirst({
-      where: { email, companyId, status: "pending" },
-    });
-    if (existingInvite) {
-      res.status(409).json({
-        data: null,
-        error: "An invite has already been sent to this email",
-      });
-      return;
-    }
+    // // Check if there's already a pending invite
+    // const existingInvite = await prisma.invite.findFirst({
+    //   where: { email, companyId, status: "pending" },
+    // });
+    // if (existingInvite) {
+    //   res.status(409).json({
+    //     data: null,
+    //     error: "An invite has already been sent to this email",
+    //   });
+    //   return;
+    // }
 
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
@@ -104,6 +104,7 @@ export const sendInvite = async (
       .status(201)
       .json({ data: { message: "Invite sent successfully" }, error: null });
   } catch (error) {
+    console.error("Error Sending Invite:", error);
     res.status(500).json({ data: null, error: "Internal server error" });
   }
 };

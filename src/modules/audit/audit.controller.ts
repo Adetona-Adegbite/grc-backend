@@ -12,15 +12,16 @@ const AUDIT_STEPS = [
 export const getAudit = async (req: Request, res: Response): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
-    const { country_id } = req.query as { country_id: string };
-
+    const { country_id } = req.query as { country_id?: string };
+    const countryWhere =
+      country_id && country_id !== "all" ? { countryId: country_id } : {};
     if (!country_id) {
       res.status(400).json({ data: null, error: "country_id is required" });
       return;
     }
 
     const controls = await prisma.control.findMany({
-      where: { companyId, countryId: country_id, status: "active" },
+      where: { companyId, ...countryWhere, status: "active" },
       include: {
         owner: { select: { id: true, fullName: true, email: true } },
       },

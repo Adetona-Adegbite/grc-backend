@@ -3,7 +3,19 @@ import { Request } from "express";
 import { prisma } from "../../config/prisma";
 import { logAudit } from "../../utils/auditLog";
 
-// ─── Controls ───────────────────────────────────────────
+const VALID_DOMAINS = [
+  "Fixed Asset",
+  "HR",
+  "Revenue",
+  "Governance & Compliance",
+  "Inventory",
+  "IT",
+  "Accounting & Reporting",
+  "Taxation",
+  "Treasury",
+  "Sustainability",
+  "Operations",
+];
 
 export const getControls = async (
   req: Request,
@@ -56,6 +68,14 @@ export const createControl = async (
       !countryId
     ) {
       res.status(400).json({ data: null, error: "All fields are required" });
+      return;
+    }
+
+    if (!VALID_DOMAINS.includes(domain)) {
+      res.status(400).json({
+        data: null,
+        error: `Invalid domain. Must be one of: ${VALID_DOMAINS.join(", ")}`,
+      });
       return;
     }
 
@@ -132,6 +152,13 @@ export const updateControl = async (
       status?: string;
     };
 
+    if (domain !== undefined && !VALID_DOMAINS.includes(domain)) {
+      res.status(400).json({
+        data: null,
+        error: `Invalid domain. Must be one of: ${VALID_DOMAINS.join(", ")}`,
+      });
+      return;
+    }
     const existing = await prisma.control.findFirst({
       where: { id, companyId },
     });
@@ -202,6 +229,13 @@ export const deleteControl = async (
   } catch (error) {
     res.status(500).json({ data: null, error: "Internal server error" });
   }
+};
+
+export const getDomains = async (
+  _req: Request,
+  res: Response
+): Promise<void> => {
+  res.status(200).json({ data: VALID_DOMAINS, error: null });
 };
 
 // ─── Countries ───────────────────────────────────────────
@@ -299,6 +333,28 @@ export const deleteCountry = async (
 
 // ─── Company ───────────────────────────────────────────
 
+export const getCompany = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const companyId = req.user!.companyId;
+
+    const company = await prisma.company.findUnique({
+      where: { id: companyId },
+      select: {
+        id: true,
+        name: true,
+        financialYearStart: true,
+      },
+    });
+
+    res.status(200).json({ data: company, error: null });
+  } catch {
+    res.status(500).json({ data: null, error: "Internal server error" });
+  }
+};
+
 export const updateCompany = async (
   req: Request,
   res: Response
@@ -326,7 +382,7 @@ export const updateCompany = async (
       companyId,
       userId: req.user!.userId,
       action: "Company updated",
-      entityType: "control",
+      entityType: "company",
       entityId: companyId,
       detail: `Financial year start: ${financialYearStart}`,
     });

@@ -34,14 +34,25 @@ app.use(
 
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // max 100 requests per 15 minutes
-  message: { data: null, error: "Too many requests, please try again later" },
+  max: 1000, // generous for normal app usage
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    data: null,
+    error: "Too many requests, please try again later",
+  },
 });
 
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10, // stricter limit for auth routes
-  message: { data: null, error: "Too many attempts, please try again later" },
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 30, // enough for retries, still blocks abuse
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true, // only count failed auth attempts
+  message: {
+    data: null,
+    error: "Too many requests, please try again later",
+  },
 });
 
 app.use(globalLimiter);
@@ -55,6 +66,7 @@ app.use(passport.initialize());
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 app.use("/api/auth", authLimiter, authRoutes);
+app.use("/api/auth", authRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/invites", inviteRoutes);
 app.use("/api/company", companyRoutes);
