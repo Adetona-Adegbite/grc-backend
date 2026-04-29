@@ -36,9 +36,11 @@ export const getMonthlyReport = async (
   try {
     const companyId = req.user!.companyId;
     const { country_id, month } = req.query as {
-      country_id: string;
+      country_id?: string;
       month: string;
     };
+    const countryWhere =
+      country_id && country_id !== "all" ? { countryId: country_id } : {};
 
     if (!country_id || !month) {
       res
@@ -57,14 +59,30 @@ export const getMonthlyReport = async (
       res.status(404).json({ data: null, error: "Company not found" });
       return;
     }
+    if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+      res
+        .status(400)
+        .json({ data: null, error: "Invalid month format. Use YYYY-MM" });
+      return;
+    }
 
-    const monthNum = new Date(`${month}-01`).getMonth() + 1;
+    const [yearStr, monthStr] = month.split("-");
+    const year = parseInt(yearStr!, 10);
+    const monthNum = parseInt(monthStr!, 10);
+
+    if (isNaN(year) || isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
+      res.status(400).json({ data: null, error: "Invalid month value" });
+      return;
+    }
+
+    const periodStart = new Date(Date.UTC(year, monthNum - 1, 1));
+    const periodEnd = new Date(Date.UTC(year, monthNum, 1));
 
     // Get all active controls due this month for this country
     const controls = await prisma.control.findMany({
       where: {
         companyId,
-        countryId: country_id,
+        ...countryWhere,
         status: "active",
         ownerId: { not: null },
       },
@@ -89,7 +107,7 @@ export const getMonthlyReport = async (
     const testResults = await prisma.testResult.findMany({
       where: {
         companyId,
-        countryId: country_id,
+        ...countryWhere,
         period: month,
         controlId: { in: dueControlIds },
       },
@@ -167,18 +185,13 @@ export const getMonthlyReport = async (
       evidenceUrl: t.evidenceUrl,
     }));
 
-    // Issues raised during this period
     const issues = await prisma.issue.findMany({
       where: {
         companyId,
-        countryId: country_id,
+        ...countryWhere,
         createdAt: {
-          gte: new Date(`${month}-01`),
-          lt: new Date(
-            new Date(`${month}-01`).getFullYear(),
-            new Date(`${month}-01`).getMonth() + 1,
-            1
-          ),
+          gte: periodStart,
+          lt: periodEnd,
         },
       },
       include: {
@@ -226,6 +239,7 @@ export const getMonthlyReport = async (
       error: null,
     });
   } catch (error) {
+    console.error(error);
     res.status(500).json({ data: null, error: "Internal server error" });
   }
 };

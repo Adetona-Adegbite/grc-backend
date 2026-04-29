@@ -52,9 +52,11 @@ export const getTestPlan = async (
     const userId = req.user!.userId;
     const role = req.user!.role;
     const { country_id, month } = req.query as {
-      country_id: string;
+      country_id?: string;
       month: string;
     };
+    const countryWhere =
+      country_id && country_id !== "all" ? { countryId: country_id } : {};
 
     if (!country_id || !month) {
       res
@@ -85,7 +87,7 @@ export const getTestPlan = async (
     // Build control filter based on role
     const controlFilter: any = {
       companyId,
-      countryId: country_id,
+      ...countryWhere,
       status: "active",
       ownerId: { not: null },
     };
@@ -109,7 +111,7 @@ export const getTestPlan = async (
           },
         },
         testResults: {
-          where: { companyId, countryId: country_id, period: month },
+          where: { companyId, ...countryWhere, period: month },
         },
       },
     });

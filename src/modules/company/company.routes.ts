@@ -4,6 +4,6 @@ import { getCompanyMembers } from "./company.controller";
 
 const router = Router();
 
-router.get("/members", authenticate, requireRole("admin"), getCompanyMembers);
+router.get("/members", authenticate, getCompanyMembers);
 
 export default router;

@@ -19,9 +19,11 @@ export const getAvailableControls = async (
     const userId = req.user!.userId;
     const role = req.user!.role;
     const { country_id, month } = req.query as {
-      country_id: string;
+      country_id?: string;
       month: string;
     };
+    const countryWhere =
+      country_id && country_id !== "all" ? { countryId: country_id } : {};
 
     if (!country_id || !month) {
       res
@@ -43,7 +45,7 @@ export const getAvailableControls = async (
     // Build filter based on role
     const controlFilter: any = {
       companyId,
-      countryId: country_id,
+      ...countryWhere,
       status: "active",
       ownerId: { not: null },
     };
@@ -60,7 +62,7 @@ export const getAvailableControls = async (
         owner: { select: { id: true, fullName: true, email: true } },
         tester: { select: { id: true, fullName: true, email: true } },
         testResults: {
-          where: { companyId, countryId: country_id, period: month },
+          where: { companyId, ...countryWhere, period: month },
         },
         testPlanOverrides: {
           where: { companyId, period: month },
@@ -233,9 +235,11 @@ export const getTestResults = async (
   try {
     const companyId = req.user!.companyId;
     const { country_id, month } = req.query as {
-      country_id: string;
+      country_id?: string;
       month: string;
     };
+    const countryWhere =
+      country_id && country_id !== "all" ? { countryId: country_id } : {};
 
     if (!country_id || !month) {
       res
@@ -245,7 +249,7 @@ export const getTestResults = async (
     }
 
     const results = await prisma.testResult.findMany({
-      where: { companyId, countryId: country_id, period: month },
+      where: { companyId, ...countryWhere, period: month },
       include: {
         control: { select: { controlId: true, name: true, domain: true } },
         tester: { select: { id: true, fullName: true, email: true } },

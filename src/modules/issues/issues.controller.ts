@@ -27,9 +27,11 @@ export const getIssues = async (req: Request, res: Response): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
     const { country_id, status } = req.query as {
-      country_id: string;
+      country_id?: string;
       status?: string;
     };
+    const countryWhere =
+      country_id && country_id !== "all" ? { countryId: country_id } : {};
 
     if (!country_id) {
       res.status(400).json({ data: null, error: "country_id is required" });
@@ -39,7 +41,7 @@ export const getIssues = async (req: Request, res: Response): Promise<void> => {
     const issues = await prisma.issue.findMany({
       where: {
         companyId,
-        countryId: country_id,
+        ...countryWhere,
         ...(status && status !== "all" && { status: status as any }),
       },
       include: {
