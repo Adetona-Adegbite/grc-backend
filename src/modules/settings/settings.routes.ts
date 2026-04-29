@@ -14,6 +14,8 @@ import {
   removeMember,
   getProcessOwners,
   reassignOwner,
+  getDomains,
+  getCompany,
 } from "./settings.controller";
 
 const router = Router();
@@ -26,6 +28,7 @@ router.get("/controls", getControls);
 router.post("/controls", createControl);
 router.put("/controls/:id", updateControl);
 router.delete("/controls/:id", deleteControl);
+router.get("/domains", getDomains);
 
 // Countries
 router.get("/countries", getCountries);
@@ -34,6 +37,7 @@ router.delete("/countries/:id", deleteCountry);
 
 // Company
 router.put("/company", updateCompany);
+router.get("/company", getCompany);
 
 router.get("/members", getMembers);
 router.put("/members/:id/role", updateMemberRole);

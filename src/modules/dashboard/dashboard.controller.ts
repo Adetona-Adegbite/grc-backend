@@ -8,14 +8,9 @@ export const getDashboard = async (
 ): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
-    const { country_id } = req.query as { country_id: string };
-
-    if (!country_id) {
-      res.status(400).json({ data: null, error: "country_id is required" });
-      return;
-    }
-
-    // Get current period YYYY-MM
+    const { country_id } = req.query as { country_id?: string };
+    const countryWhere =
+      country_id && country_id !== "all" ? { countryId: country_id } : {};
     const now = new Date();
     const period = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(
       2,
@@ -23,7 +18,6 @@ export const getDashboard = async (
     )}`;
     const monthNum = now.getMonth() + 1;
 
-    // Get company financial year start
     const company = await prisma.company.findUnique({
       where: { id: companyId },
       select: { financialYearStart: true },
@@ -34,18 +28,20 @@ export const getDashboard = async (
       return;
     }
 
-    // Total active controls for this country
+    // Build country filter — if no country_id, include all countries
+
+    // Total active controls
     const totalControls = await prisma.control.count({
-      where: { companyId, countryId: country_id, status: "active" },
+      where: { companyId, status: "active", ...countryWhere },
     });
 
     // Controls due this month
     const allActiveControls = await prisma.control.findMany({
       where: {
         companyId,
-        countryId: country_id,
         status: "active",
         ownerId: { not: null },
+        ...countryWhere,
       },
       select: { frequency: true, testDueDay: true },
     });
@@ -58,12 +54,16 @@ export const getDashboard = async (
         const diff = (monthNum - company.financialYearStart + 12) % 12;
         return diff % 3 === 0;
       }
+      if (control.frequency === "semi_annually") {
+        const diff = (monthNum - company.financialYearStart + 12) % 12;
+        return diff % 6 === 0;
+      }
       return false;
     }).length;
 
     // Test results for current period
     const testResults = await prisma.testResult.findMany({
-      where: { companyId, countryId: country_id, period },
+      where: { companyId, period, ...countryWhere },
       select: { result: true, controlId: true },
     });
 
@@ -83,10 +83,10 @@ export const getDashboard = async (
     const untestedControls = await prisma.control.findMany({
       where: {
         companyId,
-        countryId: country_id,
         status: "active",
         ownerId: { not: null },
-        id: { notIn: testedIds },
+        id: { notIn: testedIds.length > 0 ? testedIds : [""] },
+        ...countryWhere,
       },
       select: { frequency: true, testDueDay: true },
     });
@@ -100,14 +100,18 @@ export const getDashboard = async (
           const diff = (monthNum - company.financialYearStart + 12) % 12;
           return diff % 3 === 0;
         }
+        if (control.frequency === "semi_annually") {
+          const diff = (monthNum - company.financialYearStart + 12) % 12;
+          return diff % 6 === 0;
+        }
         return false;
       })();
       return isDueThisMonth && today > control.testDueDay;
     }).length;
 
-    // Open issues count + critical count
+    // Open issues
     const openIssues = await prisma.issue.findMany({
-      where: { companyId, countryId: country_id, status: { not: "closed" } },
+      where: { companyId, status: { not: "closed" }, ...countryWhere },
       select: { severity: true },
     });
 
@@ -116,7 +120,7 @@ export const getDashboard = async (
       (i) => i.severity === "high"
     ).length;
 
-    // Pending actions count + overdue count
+    // Pending actions
     const pendingActions = await prisma.action.findMany({
       where: { companyId, status: "in_progress" },
       select: { dueDate: true },
@@ -127,7 +131,7 @@ export const getDashboard = async (
       (a) => a.dueDate && new Date(a.dueDate) < now
     ).length;
 
-    // Active users count + control owners count
+    // Active users
     const activeUsers = await prisma.userCompany.findMany({
       where: { companyId },
       select: { role: true },
@@ -138,7 +142,7 @@ export const getDashboard = async (
       (u) => u.role === "control_owner"
     ).length;
 
-    // Recent activity from audit logs
+    // Recent activity
     const recentActivity = await prisma.auditLog.findMany({
       where: { companyId },
       include: {
@@ -170,6 +174,7 @@ export const getDashboard = async (
       error: null,
     });
   } catch (error) {
+    console.error("Dashboard error:", error);
     res.status(500).json({ data: null, error: "Internal server error" });
   }
 };
