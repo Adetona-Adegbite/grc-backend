@@ -5,11 +5,14 @@ import {
   acceptInvite,
   getInvites,
   revokeInvite,
+  getInviteByToken,
+  declineInvite,
 } from "./invites.controller";
 
 const router = Router();
-
-router.post("/accept", acceptInvite);
+router.get("/:token", getInviteByToken);
+router.post("/:token/accept", acceptInvite);
+router.post("/:token/decline", declineInvite);
 
 router.get("/", authenticate, requireRole("admin"), getInvites);
 router.post("/", authenticate, requireRole("admin"), sendInvite);
