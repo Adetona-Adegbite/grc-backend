@@ -58,6 +58,8 @@ export const getTestPlan = async (
     const countryWhere =
       country_id && country_id !== "all" ? { countryId: country_id } : {};
 
+    // console.log(companyId, userId, role, country_id, month);
+
     if (!country_id || !month) {
       res
         .status(400)
@@ -89,7 +91,7 @@ export const getTestPlan = async (
       companyId,
       ...countryWhere,
       status: "active",
-      ownerId: { not: null },
+      // ownerId: { not: null },
     };
 
     if (role === "control_owner") {
@@ -97,6 +99,7 @@ export const getTestPlan = async (
     } else if (role === "tester") {
       controlFilter.testerId = userId;
     }
+    console.log("Control FIlter", controlFilter);
 
     // Fetch active controls for this country
     const controls = await prisma.control.findMany({
@@ -116,10 +119,14 @@ export const getTestPlan = async (
       },
     });
 
+    console.log("All Controls", controls);
+
     // Filter controls that are due this month
     const dueControls = controls.filter((control: any) =>
       isControlDue(control.frequency, month, company.financialYearStart)
     );
+
+    console.log("Due Controls", dueControls);
 
     // Build test plan entries
     const testPlan = dueControls.map((control: any) => {
@@ -150,6 +157,8 @@ export const getTestPlan = async (
           : null,
       };
     });
+
+    console.log("Test Plan", testPlan);
 
     res.status(200).json({ data: testPlan, error: null });
   } catch (error) {

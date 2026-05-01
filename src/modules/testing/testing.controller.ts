@@ -140,6 +140,15 @@ export const logTest = async (req: Request, res: Response): Promise<void> => {
       evidenceUrl?: string;
       comments?: string;
     };
+    console.log(
+      controlId,
+      countryId,
+      period,
+      testName,
+      population,
+      sampleSize,
+      result
+    );
 
     if (
       !controlId ||

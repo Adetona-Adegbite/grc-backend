@@ -91,21 +91,22 @@ model Country {
 }
 
 model Control {
-  id         String        @id @default(uuid())
-  companyId  String
-  countryId  String
-  controlId  String
-  name       String
-  domain     String
-  risk       String
-  frequency  Frequency
-  ownerId    String?
-  testerId   String?
-  nature     Nature
-  type       ControlType
-  testDueDay Int           @default(15)
-  status     ControlStatus @default(active)
-  createdAt  DateTime      @default(now())
+  id          String        @id @default(uuid())
+  companyId   String
+  countryId   String
+  controlId   String
+  description String
+  name        String
+  domain      String
+  risk        String
+  frequency   Frequency
+  ownerId     String?
+  testerId    String?
+  nature      Nature
+  type        ControlType
+  testDueDay  Int           @default(15)
+  status      ControlStatus @default(active)
+  createdAt   DateTime      @default(now())
 
   company           Company            @relation(fields: [companyId], references: [id])
   country           Country            @relation(fields: [countryId], references: [id])
@@ -121,12 +122,13 @@ model Control {
 
 enum Nature {
   manual
-  it_dependent_manual
+  automated
 }
 
 enum ControlType {
   preventive
   detective
+  corrective
 }
 
 enum Frequency {
