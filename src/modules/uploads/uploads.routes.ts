@@ -11,6 +11,8 @@ router.post(
   "/test-evidence",
   (req: Request, res: Response, next: NextFunction) => {
     upload.single("test_evidence")(req, res, (err) => {
+      console.log(req.file, err);
+
       if (err instanceof multer.MulterError) {
         if (err.code === "LIMIT_FILE_SIZE") {
           res.status(400).json({
