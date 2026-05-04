@@ -48,6 +48,7 @@ export const createControl = async (
       domain,
       risk,
       frequency,
+      description,
       ownerId,
       testerId,
       nature,
@@ -93,6 +94,7 @@ export const createControl = async (
         companyId,
         countryId,
         controlId,
+        description,
         name,
         domain,
         risk,
@@ -131,6 +133,7 @@ export const updateControl = async (
       domain,
       risk,
       frequency,
+      description,
       ownerId,
       testerId,
       nature,
@@ -143,6 +146,7 @@ export const updateControl = async (
       domain?: string;
       risk?: string;
       frequency?: string;
+      description?: string;
       ownerId?: string;
       testerId?: string;
       nature?: string;
@@ -174,6 +178,7 @@ export const updateControl = async (
         ...(name !== undefined && { name }),
         ...(domain !== undefined && { domain }),
         ...(risk !== undefined && { risk }),
+        ...(description != undefined && { description }),
         ...(frequency !== undefined && { frequency: frequency as any }),
         ...(nature !== undefined && { nature: nature as any }),
         ...(type !== undefined && { type: type as any }),

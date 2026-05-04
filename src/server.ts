@@ -1,7 +1,3 @@
-<<<<<<< HEAD
-
-=======
->>>>>>> 454a6887bfacb4ba41fbf0c65321a0c6e70b5df9
 import dotenv from "dotenv";
 import { validateEnv } from "./config/env";
 

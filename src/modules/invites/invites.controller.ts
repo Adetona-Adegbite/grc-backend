@@ -179,7 +179,10 @@ export const acceptInvite = async (
         return;
       }
 
+      console.log(password);
+
       const hashedPassword = await hashPassword(password);
+      console.log(hashedPassword);
 
       user = await prisma.user.create({
         data: {
@@ -195,7 +198,15 @@ export const acceptInvite = async (
       isNewUser = true;
     } else {
       // 4. EXISTING USER → verify password
-      const valid = await comparePassword(password, user.password!);
+      if (!user.password) {
+        res.status(401).json({
+          data: { type: "existing_user" },
+          error: "NO_PASSWORD_SET", // user signed up via SSO/OAuth
+        });
+        return;
+      }
+
+      const valid = await comparePassword(password, user.password);
 
       if (!valid) {
         res.status(401).json({

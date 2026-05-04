@@ -34,16 +34,6 @@ app.use(
 
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-<<<<<<< HEAD
-  max: 1000, // max 100 requests per 15 minutes
-  message: { data: null, error: "Too many requests, please try again later" },
-});
-
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 50, // stricter limit for auth routes
-  message: { data: null, error: "Too many attempts, please try again later" },
-=======
   max: 1000, // generous for normal app usage
   standardHeaders: true,
   legacyHeaders: false,
@@ -63,7 +53,6 @@ const authLimiter = rateLimit({
     data: null,
     error: "Too many requests, please try again later",
   },
->>>>>>> 454a6887bfacb4ba41fbf0c65321a0c6e70b5df9
 });
 
 app.use(globalLimiter);
