@@ -4,7 +4,7 @@ import { prisma } from "../../config/prisma";
 
 export const getCompanyMembers = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
@@ -37,7 +37,7 @@ export const getCompanyMembers = async (
       },
     });
 
-    const data = members.map((m) => ({
+    const data = members.map((m: any) => ({
       id: m.user.id,
       fullName: m.user.fullName,
       email: m.user.email,

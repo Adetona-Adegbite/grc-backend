@@ -4,7 +4,7 @@ import { prisma } from "../../config/prisma";
 
 export const getConsolidated = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
@@ -40,7 +40,7 @@ export const getConsolidated = async (
 
     // Build per country data
     const data = await Promise.all(
-      countries.map(async (country) => {
+      countries.map(async (country: any) => {
         // Total active controls for this country
         const controlsFilter: any = {
           companyId,
@@ -56,7 +56,7 @@ export const getConsolidated = async (
         });
 
         // Filter controls due this period
-        const dueControls = controls.filter((control) => {
+        const dueControls = controls.filter((control: any) => {
           if (control.frequency === "monthly") return true;
           if (control.frequency === "annual")
             return monthNum === company.financialYearStart;
@@ -67,7 +67,7 @@ export const getConsolidated = async (
           return false;
         });
 
-        const dueControlIds = dueControls.map((c) => c.id);
+        const dueControlIds = dueControls.map((c: any) => c.id);
 
         // Get test results for this country and period
         const testResults = await prisma.testResult.findMany({
@@ -81,11 +81,15 @@ export const getConsolidated = async (
         });
 
         const totalDue = dueControls.length;
-        const passCount = testResults.filter((t) => t.result === "pass").length;
-        const exceptionCount = testResults.filter(
-          (t) => t.result === "exception"
+        const passCount = testResults.filter(
+          (t: any) => t.result === "pass",
         ).length;
-        const failCount = testResults.filter((t) => t.result === "fail").length;
+        const exceptionCount = testResults.filter(
+          (t: any) => t.result === "exception",
+        ).length;
+        const failCount = testResults.filter(
+          (t: any) => t.result === "fail",
+        ).length;
         const totalTested = testResults.length;
         const passRate =
           totalTested > 0 ? Math.round((passCount / totalTested) * 100) : 0;
@@ -101,7 +105,7 @@ export const getConsolidated = async (
           coverage:
             totalDue > 0 ? Math.round((totalTested / totalDue) * 100) : 0,
         };
-      })
+      }),
     );
 
     // Aggregate totals
@@ -117,7 +121,7 @@ export const getConsolidated = async (
             ? Math.round(
                 ((acc.passCount + row.passCount) /
                   (acc.totalTested + row.totalTested)) *
-                  100
+                  100,
               )
             : 0,
         coverage:
@@ -125,7 +129,7 @@ export const getConsolidated = async (
             ? Math.round(
                 ((acc.totalTested + row.totalTested) /
                   (acc.totalDue + row.totalDue)) *
-                  100
+                  100,
               )
             : 0,
       }),
@@ -137,7 +141,7 @@ export const getConsolidated = async (
         failCount: 0,
         passRate: 0,
         coverage: 0,
-      }
+      },
     );
 
     res.status(200).json({

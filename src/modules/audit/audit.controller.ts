@@ -31,7 +31,7 @@ export const getAudit = async (req: Request, res: Response): Promise<void> => {
     // Group by domain
     const domainMap: Record<string, any[]> = {};
 
-    controls.forEach((control) => {
+    controls.forEach((control: any) => {
       if (!domainMap[control.domain]) {
         domainMap[control.domain] = [];
       }
