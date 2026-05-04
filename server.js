@@ -1,13 +1,30 @@
+// "use strict";
+// const dotenv_1 = __importDefault(require("dotenv"));
+// dotenv_1.default.config();
+// var __importDefault = (this && this.__importDefault) || function (mod) {
+//     return (mod && mod.__esModule) ? mod : { "default": mod };
+// };
+// Object.defineProperty(exports, "__esModule", { value: true });
+// const app_1 = __importDefault(require("./app"));
+
+
+// const PORT = process.env.PORT || 5000;
+// app_1.default.listen(PORT, () => {
+//     console.log(`🚀 Server running on http://localhost:${PORT}`);
+// });
+// //# sourceMappingURL=server.js.map
+
+
 "use strict";
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const app_1 = __importDefault(require("./app"));
 const dotenv_1 = __importDefault(require("dotenv"));
-dotenv_1.default.config();
+dotenv_1.default.config(); // ← moved up, before app is imported
+
+const app_1 = __importDefault(require("./app")); // ← now env is ready
 const PORT = process.env.PORT || 5000;
 app_1.default.listen(PORT, () => {
     console.log(`🚀 Server running on http://localhost:${PORT}`);
 });
-//# sourceMappingURL=server.js.map
