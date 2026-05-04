@@ -11,7 +11,7 @@ interface CreateIssueParams {
 }
 
 export const createIssueHelper = async (params: CreateIssueParams) => {
-  return prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx: any) => {
     const count = await tx.issue.count({
       where: { companyId: params.companyId },
     });

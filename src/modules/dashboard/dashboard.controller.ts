@@ -4,7 +4,7 @@ import { prisma } from "../../config/prisma";
 
 export const getDashboard = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
@@ -14,7 +14,7 @@ export const getDashboard = async (
     const now = new Date();
     const period = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(
       2,
-      "0"
+      "0",
     )}`;
     const monthNum = now.getMonth() + 1;
 
@@ -46,7 +46,7 @@ export const getDashboard = async (
       select: { frequency: true, testDueDay: true },
     });
 
-    const controlsDueThisMonth = allActiveControls.filter((control) => {
+    const controlsDueThisMonth = allActiveControls.filter((control: any) => {
       if (control.frequency === "monthly") return true;
       if (control.frequency === "annual")
         return monthNum === company.financialYearStart;
@@ -67,17 +67,21 @@ export const getDashboard = async (
       select: { result: true, controlId: true },
     });
 
-    const passCount = testResults.filter((t) => t.result === "pass").length;
-    const exceptionCount = testResults.filter(
-      (t) => t.result === "exception"
+    const passCount = testResults.filter(
+      (t: any) => t.result === "pass",
     ).length;
-    const failCount = testResults.filter((t) => t.result === "fail").length;
+    const exceptionCount = testResults.filter(
+      (t: any) => t.result === "exception",
+    ).length;
+    const failCount = testResults.filter(
+      (t: any) => t.result === "fail",
+    ).length;
     const totalTested = testResults.length;
     const passRate =
       totalTested > 0 ? Math.round((passCount / totalTested) * 100) : 0;
 
     // Overdue tests
-    const testedIds = testResults.map((t) => t.controlId);
+    const testedIds = testResults.map((t: any) => t.controlId);
     const today = now.getDate();
 
     const untestedControls = await prisma.control.findMany({
@@ -91,7 +95,7 @@ export const getDashboard = async (
       select: { frequency: true, testDueDay: true },
     });
 
-    const overdueCount = untestedControls.filter((control) => {
+    const overdueCount = untestedControls.filter((control: any) => {
       const isDueThisMonth = (() => {
         if (control.frequency === "monthly") return true;
         if (control.frequency === "annual")
@@ -117,7 +121,7 @@ export const getDashboard = async (
 
     const openIssuesCount = openIssues.length;
     const criticalIssuesCount = openIssues.filter(
-      (i) => i.severity === "high"
+      (i: any) => i.severity === "high",
     ).length;
 
     // Pending actions
@@ -128,7 +132,7 @@ export const getDashboard = async (
 
     const pendingActionsCount = pendingActions.length;
     const overdueActionsCount = pendingActions.filter(
-      (a) => a.dueDate && new Date(a.dueDate) < now
+      (a: any) => a.dueDate && new Date(a.dueDate) < now,
     ).length;
 
     // Active users
@@ -139,7 +143,7 @@ export const getDashboard = async (
 
     const activeUsersCount = activeUsers.length;
     const controlOwnersCount = activeUsers.filter(
-      (u) => u.role === "control_owner"
+      (u: any) => u.role === "control_owner",
     ).length;
 
     // Recent activity

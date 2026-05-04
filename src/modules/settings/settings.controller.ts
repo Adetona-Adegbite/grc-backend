@@ -19,7 +19,7 @@ const VALID_DOMAINS = [
 
 export const getControls = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
@@ -38,7 +38,7 @@ export const getControls = async (
 
 export const createControl = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
@@ -123,7 +123,7 @@ export const createControl = async (
 
 export const updateControl = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
@@ -206,7 +206,7 @@ export const updateControl = async (
 };
 export const deleteControl = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
@@ -238,7 +238,7 @@ export const deleteControl = async (
 
 export const getDomains = async (
   _req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   res.status(200).json({ data: VALID_DOMAINS, error: null });
 };
@@ -247,7 +247,7 @@ export const getDomains = async (
 
 export const getCountries = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
@@ -265,7 +265,7 @@ export const getCountries = async (
 
 export const createCountry = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
@@ -306,7 +306,7 @@ export const createCountry = async (
 
 export const deleteCountry = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
@@ -340,7 +340,7 @@ export const deleteCountry = async (
 
 export const getCompany = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
@@ -362,7 +362,7 @@ export const getCompany = async (
 
 export const updateCompany = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
@@ -399,7 +399,7 @@ export const updateCompany = async (
 
 export const getMembers = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
@@ -420,7 +420,7 @@ export const getMembers = async (
       orderBy: { joinedAt: "asc" },
     });
 
-    const data = members.map((m) => ({
+    const data = members.map((m: any) => ({
       id: m.user.id,
       fullName: m.user.fullName,
       email: m.user.email,
@@ -437,7 +437,7 @@ export const getMembers = async (
 
 export const updateMemberRole = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
@@ -492,7 +492,7 @@ export const updateMemberRole = async (
 
 export const removeMember = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
@@ -532,7 +532,7 @@ export const removeMember = async (
 
 export const getProcessOwners = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
@@ -546,7 +546,7 @@ export const getProcessOwners = async (
       orderBy: { controlId: "asc" },
     });
 
-    const data = controls.map((c) => ({
+    const data = controls.map((c: any) => ({
       id: c.id,
       controlId: c.controlId,
       name: c.name,
@@ -564,7 +564,7 @@ export const getProcessOwners = async (
 
 export const reassignOwner = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const companyId = req.user!.companyId;

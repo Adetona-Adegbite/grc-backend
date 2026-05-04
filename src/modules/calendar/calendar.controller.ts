@@ -4,7 +4,7 @@ import { prisma } from "../../config/prisma";
 const isControlDueInMonth = (
   frequency: string,
   monthNum: number,
-  financialYearStart: number
+  financialYearStart: number,
 ): boolean => {
   if (frequency === "monthly") return true;
 
@@ -44,7 +44,7 @@ const MONTH_NAMES = [
 
 export const getCalendar = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
@@ -99,8 +99,8 @@ export const getCalendar = async (
       const monthYear =
         monthNum >= financialYearStart ? currentYear : currentYear + 1;
 
-      const dueControls = controls.filter((control) =>
-        isControlDueInMonth(control.frequency, monthNum, financialYearStart)
+      const dueControls = controls.filter((control: any) =>
+        isControlDueInMonth(control.frequency, monthNum, financialYearStart),
       );
 
       return {
@@ -109,7 +109,7 @@ export const getCalendar = async (
         year: monthYear,
         period: `${monthYear}-${String(monthNum).padStart(2, "0")}`,
         totalControls: dueControls.length,
-        controls: dueControls.map((c) => ({
+        controls: dueControls.map((c: any) => ({
           controlId: c.controlId,
           name: c.name,
           frequency: c.frequency,

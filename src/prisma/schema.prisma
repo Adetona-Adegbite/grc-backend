@@ -8,13 +8,15 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  fullName  String?
-  avatarUrl String?
-  password  String?
-  googleId  String?  @unique
-  createdAt DateTime @default(now())
+  id               String    @id @default(uuid())
+  email            String    @unique
+  fullName         String?
+  avatarUrl        String?
+  password         String?
+  googleId         String?   @unique
+  createdAt        DateTime  @default(now())
+  resetToken       String?
+  resetTokenExpiry DateTime?
 
   ownedCompanies    Company[]          @relation("CompanyOwner")
   userCompanies     UserCompany[]

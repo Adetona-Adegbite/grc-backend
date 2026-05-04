@@ -7,13 +7,13 @@ const generateRecommendations = (
   passRate: number,
   exceptionCount: number,
   openIssuesCount: number,
-  coverage: number
+  coverage: number,
 ): string[] => {
   const recommendations: string[] = [];
 
   if (passRate < 80) {
     recommendations.push(
-      "⚠ Pass rate of " + passRate + "% is below acceptable threshold."
+      "⚠ Pass rate of " + passRate + "% is below acceptable threshold.",
     );
   }
   if (exceptionCount > 0) {
@@ -31,7 +31,7 @@ const generateRecommendations = (
 
 export const getMonthlyReport = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
@@ -89,7 +89,7 @@ export const getMonthlyReport = async (
       select: { id: true, frequency: true, domain: true },
     });
 
-    const dueControls = controls.filter((control) => {
+    const dueControls = controls.filter((control: any) => {
       if (control.frequency === "monthly") return true;
       if (control.frequency === "annual")
         return monthNum === company.financialYearStart;
@@ -100,7 +100,7 @@ export const getMonthlyReport = async (
       return false;
     });
 
-    const dueControlIds = dueControls.map((c) => c.id);
+    const dueControlIds = dueControls.map((c: any) => c.id);
     const totalDue = dueControls.length;
 
     // Get test results for this period
@@ -126,11 +126,15 @@ export const getMonthlyReport = async (
 
     // Header metrics
     const totalTests = testResults.length;
-    const passCount = testResults.filter((t) => t.result === "pass").length;
-    const exceptionCount = testResults.filter(
-      (t) => t.result === "exception"
+    const passCount = testResults.filter(
+      (t: any) => t.result === "pass",
     ).length;
-    const failCount = testResults.filter((t) => t.result === "fail").length;
+    const exceptionCount = testResults.filter(
+      (t: any) => t.result === "exception",
+    ).length;
+    const failCount = testResults.filter(
+      (t: any) => t.result === "fail",
+    ).length;
     const passRate =
       totalTests > 0 ? Math.round((passCount / totalTests) * 100) : 0;
     const coverage =
@@ -147,7 +151,7 @@ export const getMonthlyReport = async (
       }
     > = {};
 
-    testResults.forEach((t) => {
+    testResults.forEach((t: any) => {
       const domain = t.control.domain;
       if (!domainMap[domain]) {
         domainMap[domain] = {
@@ -173,7 +177,7 @@ export const getMonthlyReport = async (
     }));
 
     // Detailed test results
-    const detailedResults = testResults.map((t) => ({
+    const detailedResults = testResults.map((t: any) => ({
       testDate: t.testedAt,
       controlId: t.control.controlId,
       controlName: t.control.name,
@@ -201,7 +205,7 @@ export const getMonthlyReport = async (
       orderBy: { createdAt: "asc" },
     });
 
-    const issuesData = issues.map((i) => ({
+    const issuesData = issues.map((i: any) => ({
       issueId: i.issueId,
       controlId: i.control.controlId,
       description: i.description,
@@ -216,7 +220,7 @@ export const getMonthlyReport = async (
       passRate,
       exceptionCount,
       issues.length,
-      coverage
+      coverage,
     );
 
     res.status(200).json({
