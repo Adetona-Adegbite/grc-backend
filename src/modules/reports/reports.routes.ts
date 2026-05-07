@@ -8,8 +8,8 @@ router.use(authenticate);
 
 router.get(
   "/monthly",
-  requireRole("admin", "control_owner", "viewer"),
-  getMonthlyReport
+  requireRole("admin", "control_owner", "viewer", "tester"),
+  getMonthlyReport,
 );
 
 export default router;

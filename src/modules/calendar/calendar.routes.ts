@@ -6,6 +6,6 @@ const router = Router();
 
 router.use(authenticate);
 
-router.get("/", requireRole("admin", "control_owner"), getCalendar);
+router.get("/", requireRole("admin", "control_owner", "tester"), getCalendar);
 
 export default router;

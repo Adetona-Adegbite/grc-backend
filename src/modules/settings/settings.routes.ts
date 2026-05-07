@@ -20,6 +20,8 @@ import {
 
 const router = Router();
 
+router.get("/countries", authenticate, getCountries);
+
 // All settings routes require authentication + admin role
 router.use(authenticate, requireRole("admin"));
 
@@ -31,7 +33,6 @@ router.delete("/controls/:id", deleteControl);
 router.get("/domains", getDomains);
 
 // Countries
-router.get("/countries", getCountries);
 router.post("/countries", createCountry);
 router.delete("/countries/:id", deleteCountry);
 

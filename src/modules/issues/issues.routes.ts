@@ -17,10 +17,12 @@ router.get("/", getIssues);
 // Get single issue with actions
 router.get("/:id", getIssue);
 
-// Create manual issue — admin and control owner only
-router.post("/", requireRole("admin", "control_owner"), createIssue);
+router.post("/", requireRole("admin", "control_owner", "tester"), createIssue);
 
-// Update issue — admin and control owner only
-router.put("/:id", requireRole("admin", "control_owner"), updateIssue);
+router.put(
+  "/:id",
+  requireRole("admin", "control_owner", "tester"),
+  updateIssue,
+);
 
 export default router;

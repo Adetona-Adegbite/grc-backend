@@ -15,10 +15,14 @@ router.use(authenticate);
 router.get("/", getActions);
 
 // Create action — admin and control owner only
-router.post("/", requireRole("admin", "control_owner"), createAction);
+router.post("/", requireRole("admin", "control_owner", "tester"), createAction);
 
 // Update action — admin and control owner only
-router.put("/:id", requireRole("admin", "control_owner"), updateAction);
+router.put(
+  "/:id",
+  requireRole("admin", "control_owner", "tester"),
+  updateAction,
+);
 
 // Delete action — admin only
 router.delete("/:id", requireRole("admin"), deleteAction);
