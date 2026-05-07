@@ -89,6 +89,58 @@ export const createControl = async (
       return;
     }
 
+    // If countryId is "all", create the control for every country in the company
+    if (countryId === "all") {
+      const allCountries = await prisma.country.findMany({
+        where: { companyId },
+        select: { id: true },
+      });
+
+      if (allCountries.length === 0) {
+        res
+          .status(400)
+          .json({ data: null, error: "No countries found for this company" });
+        return;
+      }
+
+      const created = await Promise.all(
+        allCountries.map((country: { id: string }, index: number) =>
+          prisma.control.create({
+            data: {
+              companyId,
+              countryId: country.id,
+              // Append country index to keep controlId unique per country
+              controlId: index === 0 ? controlId : `${controlId}-${index + 1}`,
+              description,
+              name,
+              domain,
+              risk,
+              frequency: frequency as any,
+              nature: nature as any,
+              type: type as any,
+              testDueDay: testDueDay || 15,
+              ownerId: ownerId || null,
+              testerId: testerId || null,
+              status: (status as any) || "active",
+            },
+          }),
+        ),
+      );
+
+      await logAudit({
+        companyId,
+        userId: req.user!.userId,
+        action: "Control created",
+        entityType: "control",
+        entityId: created[0]!.id,
+        detail: `${controlId} — ${name} (all countries)`,
+      });
+
+      res.status(201).json({ data: created, error: null });
+      return;
+    }
+
+    // Single country
     const control = await prisma.control.create({
       data: {
         companyId,
@@ -107,6 +159,7 @@ export const createControl = async (
         status: (status as any) || "active",
       },
     });
+
     await logAudit({
       companyId,
       userId: req.user!.userId,
@@ -115,6 +168,7 @@ export const createControl = async (
       entityId: control.id,
       detail: `${control.controlId} — ${control.name}`,
     });
+
     res.status(201).json({ data: control, error: null });
   } catch (error) {
     res.status(500).json({ data: null, error: "Internal server error" });
@@ -163,6 +217,7 @@ export const updateControl = async (
       });
       return;
     }
+
     const existing = await prisma.control.findFirst({
       where: { id, companyId },
     });
@@ -204,6 +259,7 @@ export const updateControl = async (
     res.status(500).json({ data: null, error: "Internal server error" });
   }
 };
+
 export const deleteControl = async (
   req: Request,
   res: Response,
@@ -222,6 +278,7 @@ export const deleteControl = async (
     }
 
     await prisma.control.delete({ where: { id } });
+
     await logAudit({
       companyId,
       userId: req.user!.userId,
@@ -230,6 +287,7 @@ export const deleteControl = async (
       entityId: id,
       detail: `${existing.controlId} — ${existing.name}`,
     });
+
     res.status(200).json({ data: { message: "Control deleted" }, error: null });
   } catch (error) {
     res.status(500).json({ data: null, error: "Internal server error" });
@@ -251,12 +309,10 @@ export const getCountries = async (
 ): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
-
     const countries = await prisma.country.findMany({
       where: { companyId },
       orderBy: { name: "asc" },
     });
-
     res.status(200).json({ data: countries, error: null });
   } catch (error) {
     res.status(500).json({ data: null, error: "Internal server error" });
@@ -290,6 +346,7 @@ export const createCountry = async (
     const country = await prisma.country.create({
       data: { companyId, name, code },
     });
+
     await logAudit({
       companyId,
       userId: req.user!.userId,
@@ -298,6 +355,7 @@ export const createCountry = async (
       entityId: country.id,
       detail: `${country.name} — ${country.code}`,
     });
+
     res.status(201).json({ data: country, error: null });
   } catch (error) {
     res.status(500).json({ data: null, error: "Internal server error" });
@@ -322,6 +380,7 @@ export const deleteCountry = async (
     }
 
     await prisma.country.delete({ where: { id } });
+
     await logAudit({
       companyId,
       userId: req.user!.userId,
@@ -330,6 +389,7 @@ export const deleteCountry = async (
       entityId: id,
       detail: `${existing.name} — ${existing.code}`,
     });
+
     res.status(200).json({ data: { message: "Country deleted" }, error: null });
   } catch (error) {
     res.status(500).json({ data: null, error: "Internal server error" });
@@ -344,16 +404,10 @@ export const getCompany = async (
 ): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
-
     const company = await prisma.company.findUnique({
       where: { id: companyId },
-      select: {
-        id: true,
-        name: true,
-        financialYearStart: true,
-      },
+      select: { id: true, name: true, financialYearStart: true },
     });
-
     res.status(200).json({ data: company, error: null });
   } catch {
     res.status(500).json({ data: null, error: "Internal server error" });
@@ -383,6 +437,7 @@ export const updateCompany = async (
       where: { id: companyId },
       data: { name, financialYearStart },
     });
+
     await logAudit({
       companyId,
       userId: req.user!.userId,
@@ -391,6 +446,7 @@ export const updateCompany = async (
       entityId: companyId,
       detail: `Financial year start: ${financialYearStart}`,
     });
+
     res.status(200).json({ data: company, error: null });
   } catch (error) {
     res.status(500).json({ data: null, error: "Internal server error" });
@@ -455,7 +511,6 @@ export const updateMemberRole = async (
       return;
     }
 
-    // Prevent admin from changing their own role
     if (id === req.user!.userId) {
       res
         .status(400)
@@ -476,6 +531,7 @@ export const updateMemberRole = async (
       where: { id: existing.id },
       data: { role: role as any },
     });
+
     await logAudit({
       companyId,
       userId: req.user!.userId,
@@ -484,6 +540,7 @@ export const updateMemberRole = async (
       entityId: id,
       detail: `New role: ${role}`,
     });
+
     res.status(200).json({ data: updated, error: null });
   } catch (error) {
     res.status(500).json({ data: null, error: "Internal server error" });
@@ -498,7 +555,6 @@ export const removeMember = async (
     const companyId = req.user!.companyId;
     const { id } = req.params as { id: string };
 
-    // Prevent admin from removing themselves
     if (id === req.user!.userId) {
       res.status(400).json({ data: null, error: "You cannot remove yourself" });
       return;
@@ -514,6 +570,7 @@ export const removeMember = async (
     }
 
     await prisma.userCompany.delete({ where: { id: existing.id } });
+
     await logAudit({
       companyId,
       userId: req.user!.userId,
@@ -522,6 +579,7 @@ export const removeMember = async (
       entityId: id,
       detail: `User ${id} removed from company`,
     });
+
     res.status(200).json({ data: { message: "Member removed" }, error: null });
   } catch (error) {
     res.status(500).json({ data: null, error: "Internal server error" });
@@ -585,7 +643,6 @@ export const reassignOwner = async (
       return;
     }
 
-    // Verify new owner belongs to company
     const member = await prisma.userCompany.findFirst({
       where: { userId: ownerId, companyId },
     });
@@ -598,9 +655,7 @@ export const reassignOwner = async (
     const updated = await prisma.control.update({
       where: { id },
       data: { ownerId },
-      include: {
-        owner: { select: { id: true, fullName: true, email: true } },
-      },
+      include: { owner: { select: { id: true, fullName: true, email: true } } },
     });
 
     await logAudit({

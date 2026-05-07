@@ -12,7 +12,7 @@ const generateTestId = async (companyId: string): Promise<string> => {
 
 export const getAvailableControls = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
@@ -42,7 +42,6 @@ export const getAvailableControls = async (
       return;
     }
 
-    // Build filter based on role
     const controlFilter: any = {
       companyId,
       ...countryWhere,
@@ -77,7 +76,7 @@ export const getAvailableControls = async (
       .filter((control: any) => {
         const [year, monthNum] = month.split("-").map(Number) as [
           number,
-          number
+          number,
         ];
         const diff = (monthNum - company.financialYearStart + 12) % 12;
 
@@ -140,15 +139,6 @@ export const logTest = async (req: Request, res: Response): Promise<void> => {
       evidenceUrl?: string;
       comments?: string;
     };
-    console.log(
-      controlId,
-      countryId,
-      period,
-      testName,
-      population,
-      sampleSize,
-      result
-    );
 
     if (
       !controlId ||
@@ -165,7 +155,6 @@ export const logTest = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Verify control belongs to company
     const control = await prisma.control.findFirst({
       where: { id: controlId, companyId },
     });
@@ -175,7 +164,6 @@ export const logTest = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Check not already tested this period
     const existing = await prisma.testResult.findUnique({
       where: { companyId_controlId_period: { companyId, controlId, period } },
     });
@@ -209,7 +197,6 @@ export const logTest = async (req: Request, res: Response): Promise<void> => {
       },
     });
 
-    // Auto create issue if result is exception or fail
     if (result === "exception" || result === "fail") {
       await createIssueHelper({
         companyId,
@@ -221,16 +208,16 @@ export const logTest = async (req: Request, res: Response): Promise<void> => {
         ownerId: control.ownerId,
       });
     }
+
     await logAudit({
       companyId,
       userId: testerId,
       action: "Test completed",
       entityType: "test",
       entityId: testResult.id,
-      detail: `${control.controlId} — ${
-        testResult.result.charAt(0).toUpperCase() + testResult.result.slice(1)
-      }`,
+      detail: `${control.controlId} — ${testResult.result.charAt(0).toUpperCase() + testResult.result.slice(1)}`,
     });
+
     res.status(201).json({ data: testResult, error: null });
   } catch (error) {
     res.status(500).json({ data: null, error: "Internal server error" });
@@ -239,10 +226,12 @@ export const logTest = async (req: Request, res: Response): Promise<void> => {
 
 export const getTestResults = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
+    const userId = req.user!.userId;
+    const role = req.user!.role;
     const { country_id, month } = req.query as {
       country_id?: string;
       month: string;
@@ -257,8 +246,11 @@ export const getTestResults = async (
       return;
     }
 
+    // Testers only see their own test results
+    const testerWhere = role === "tester" ? { testerId: userId } : {};
+
     const results = await prisma.testResult.findMany({
-      where: { companyId, ...countryWhere, period: month },
+      where: { companyId, ...countryWhere, ...testerWhere, period: month },
       include: {
         control: { select: { controlId: true, name: true, domain: true } },
         tester: { select: { id: true, fullName: true, email: true } },
@@ -274,7 +266,7 @@ export const getTestResults = async (
 
 export const getTestHistory = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const companyId = req.user!.companyId;

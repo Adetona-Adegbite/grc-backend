@@ -6,6 +6,6 @@ const router = Router();
 
 router.use(authenticate);
 
-router.get("/", requireRole("admin", "viewer"), getConsolidated);
+router.get("/", requireRole("admin", "viewer", "tester"), getConsolidated);
 
 export default router;
