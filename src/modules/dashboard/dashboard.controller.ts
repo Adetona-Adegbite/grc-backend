@@ -4,7 +4,7 @@ import { prisma } from "../../config/prisma";
 
 export const getDashboard = async (
   req: Request,
-  res: Response,
+  res: Response
 ): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
@@ -14,7 +14,10 @@ export const getDashboard = async (
     const countryWhere =
       country_id && country_id !== "all" ? { countryId: country_id } : {};
     const now = new Date();
-    const period = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const period = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(
+      2,
+      "0"
+    )}`;
     const monthNum = now.getMonth() + 1;
 
     const company = await prisma.company.findUnique({
@@ -35,16 +38,16 @@ export const getDashboard = async (
       });
 
       const currentPeriodTests = assignedTests.filter(
-        (t: any) => t.period === period,
+        (t: any) => t.period === period
       );
       const passCount = currentPeriodTests.filter(
-        (t: any) => t.result === "pass",
+        (t: any) => t.result === "pass"
       ).length;
       const failCount = currentPeriodTests.filter(
-        (t: any) => t.result === "fail",
+        (t: any) => t.result === "fail"
       ).length;
       const exceptionCount = currentPeriodTests.filter(
-        (t: any) => t.result === "exception",
+        (t: any) => t.result === "exception"
       ).length;
       const totalTested = currentPeriodTests.length;
       const passRate =
@@ -53,7 +56,7 @@ export const getDashboard = async (
       const openIssues = await prisma.issue.findMany({
         where: {
           companyId,
-          loggedById: userId,
+          ownerId: userId,
           status: { not: "closed" },
           ...countryWhere,
         },
@@ -61,16 +64,16 @@ export const getDashboard = async (
       });
 
       const pendingActions = await prisma.action.findMany({
-        where: { companyId, assignedToId: userId, status: "in_progress" },
+        where: { companyId, ownerId: userId, status: "in_progress" },
         select: { dueDate: true },
       });
 
       const overdueActionsCount = pendingActions.filter(
-        (a: any) => a.dueDate && new Date(a.dueDate) < now,
+        (a: any) => a.dueDate && new Date(a.dueDate) < now
       ).length;
 
       const recentActivity = await prisma.auditLog.findMany({
-        where: { companyId, userId },
+        where: { companyId },
         include: { user: { select: { fullName: true, email: true } } },
         orderBy: { createdAt: "desc" },
         take: 10,
@@ -88,7 +91,7 @@ export const getDashboard = async (
           passRate,
           openIssuesCount: openIssues.length,
           criticalIssuesCount: openIssues.filter(
-            (i: any) => i.severity === "high",
+            (i: any) => i.severity === "high"
           ).length,
           pendingActionsCount: pendingActions.length,
           overdueActionsCount,
@@ -139,7 +142,7 @@ export const getDashboard = async (
       });
 
       const passCount = testResults.filter(
-        (t: any) => t.result === "pass",
+        (t: any) => t.result === "pass"
       ).length;
       const totalTested = testResults.length;
       const passRate =
@@ -149,7 +152,7 @@ export const getDashboard = async (
       const today = now.getDate();
 
       const untestedControls = myControls.filter(
-        (c: any) => !testedIds.includes(c.id),
+        (c: any) => !testedIds.includes(c.id)
       );
 
       const overdueCount = untestedControls.filter((control: any) => {
@@ -181,12 +184,12 @@ export const getDashboard = async (
       });
 
       const pendingActions = await prisma.action.findMany({
-        where: { companyId, assignedToId: userId, status: "in_progress" },
+        where: { companyId, ownerId: userId, status: "in_progress" },
         select: { dueDate: true },
       });
 
       const overdueActionsCount = pendingActions.filter(
-        (a: any) => a.dueDate && new Date(a.dueDate) < now,
+        (a: any) => a.dueDate && new Date(a.dueDate) < now
       ).length;
 
       const recentActivity = await prisma.auditLog.findMany({
@@ -207,7 +210,7 @@ export const getDashboard = async (
           passRate,
           openIssuesCount: openIssues.length,
           criticalIssuesCount: openIssues.filter(
-            (i: any) => i.severity === "high",
+            (i: any) => i.severity === "high"
           ).length,
           pendingActionsCount: pendingActions.length,
           overdueActionsCount,
@@ -230,7 +233,7 @@ export const getDashboard = async (
       });
 
       const passCount = testResults.filter(
-        (t: any) => t.result === "pass",
+        (t: any) => t.result === "pass"
       ).length;
       const totalTested = testResults.length;
       const passRate =
@@ -251,7 +254,7 @@ export const getDashboard = async (
           totalTested,
           openIssuesCount: openIssues.length,
           criticalIssuesCount: openIssues.filter(
-            (i: any) => i.severity === "high",
+            (i: any) => i.severity === "high"
           ).length,
         },
         error: null,
@@ -295,13 +298,13 @@ export const getDashboard = async (
     });
 
     const passCount = testResults.filter(
-      (t: any) => t.result === "pass",
+      (t: any) => t.result === "pass"
     ).length;
     const exceptionCount = testResults.filter(
-      (t: any) => t.result === "exception",
+      (t: any) => t.result === "exception"
     ).length;
     const failCount = testResults.filter(
-      (t: any) => t.result === "fail",
+      (t: any) => t.result === "fail"
     ).length;
     const totalTested = testResults.length;
     const passRate =
@@ -375,15 +378,15 @@ export const getDashboard = async (
         overdueCount,
         openIssuesCount: openIssues.length,
         criticalIssuesCount: openIssues.filter(
-          (i: any) => i.severity === "high",
+          (i: any) => i.severity === "high"
         ).length,
         pendingActionsCount: pendingActions.length,
         overdueActionsCount: pendingActions.filter(
-          (a: any) => a.dueDate && new Date(a.dueDate) < now,
+          (a: any) => a.dueDate && new Date(a.dueDate) < now
         ).length,
         activeUsersCount: activeUsers.length,
         controlOwnersCount: activeUsers.filter(
-          (u: any) => u.role === "control_owner",
+          (u: any) => u.role === "control_owner"
         ).length,
         recentActivity,
       },
