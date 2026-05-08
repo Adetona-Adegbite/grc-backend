@@ -21,16 +21,51 @@ import {
 const router = Router();
 
 router.get("/countries", authenticate, getCountries);
+router.get(
+  "/controls",
+  authenticate,
+  requireRole("admin", "tester"),
+  getControls
+);
+router.post(
+  "/controls",
+  authenticate,
+  requireRole("admin", "tester"),
+  createControl
+);
+router.put(
+  "/controls/:id",
+  authenticate,
+  requireRole("admin", "tester"),
+  updateControl
+);
+router.delete(
+  "/controls/:id",
+  authenticate,
+  requireRole("admin", "tester"),
+  deleteControl
+);
+router.get(
+  "/domains",
+  authenticate,
+  requireRole("admin", "tester"),
+  getDomains
+);
+router.get(
+  "/members",
+  authenticate,
+  requireRole("admin", "tester"),
+  getMembers
+);
+router.get(
+  "/process-owners",
+  authenticate,
+  requireRole("admin", "tester"),
+  getProcessOwners
+);
 
 // All settings routes require authentication + admin role
 router.use(authenticate, requireRole("admin"));
-
-// Controls
-router.get("/controls", getControls);
-router.post("/controls", createControl);
-router.put("/controls/:id", updateControl);
-router.delete("/controls/:id", deleteControl);
-router.get("/domains", getDomains);
 
 // Countries
 router.post("/countries", createCountry);
@@ -40,11 +75,9 @@ router.delete("/countries/:id", deleteCountry);
 router.put("/company", updateCompany);
 router.get("/company", getCompany);
 
-router.get("/members", getMembers);
 router.put("/members/:id/role", updateMemberRole);
 router.delete("/members/:id", removeMember);
 
-router.get("/process-owners", getProcessOwners);
 router.put("/process-owners/:id", reassignOwner);
 
 export default router;
