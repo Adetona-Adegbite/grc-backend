@@ -97,7 +97,7 @@ model Control {
   companyId   String
   countryId   String
   controlId   String
-  description String
+  description String        
   name        String
   domain      String
   risk        String
