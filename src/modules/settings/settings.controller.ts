@@ -81,7 +81,9 @@ export const createControl = async (
     }
 
     const existing = await prisma.control.findUnique({
-      where: { companyId_controlId: { companyId, controlId } },
+      where: {
+        companyId_controlId_countryId: { companyId, controlId, countryId },
+      },
     });
 
     if (existing) {
