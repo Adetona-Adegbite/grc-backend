@@ -24,44 +24,44 @@ router.get("/countries", authenticate, getCountries);
 router.get(
   "/controls",
   authenticate,
-  requireRole("admin", "tester"),
-  getControls
+  requireRole("admin", "tester", "control_owner"),
+  getControls,
 );
 router.post(
   "/controls",
   authenticate,
-  requireRole("admin", "tester"),
-  createControl
+  requireRole("admin", "tester", "control_owner"),
+  createControl,
 );
 router.put(
   "/controls/:id",
   authenticate,
-  requireRole("admin", "tester"),
-  updateControl
+  requireRole("admin", "tester", "control_owner"),
+  updateControl,
 );
 router.delete(
   "/controls/:id",
   authenticate,
-  requireRole("admin", "tester"),
-  deleteControl
+  requireRole("admin", "tester", "control_owner"),
+  deleteControl,
 );
 router.get(
   "/domains",
   authenticate,
   requireRole("admin", "tester"),
-  getDomains
+  getDomains,
 );
 router.get(
   "/members",
   authenticate,
   requireRole("admin", "tester"),
-  getMembers
+  getMembers,
 );
 router.get(
   "/process-owners",
   authenticate,
-  requireRole("admin", "tester"),
-  getProcessOwners
+  requireRole("admin", "tester", "control_owner"),
+  getProcessOwners,
 );
 
 // All settings routes require authentication + admin role

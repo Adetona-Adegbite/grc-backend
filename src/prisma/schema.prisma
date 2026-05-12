@@ -97,7 +97,7 @@ model Control {
   companyId   String
   countryId   String
   controlId   String
-  description String        
+  description String
   name        String
   domain      String
   risk        String
@@ -118,7 +118,7 @@ model Control {
   testResults       TestResult[]
   issues            Issue[]
 
-  @@unique([companyId, controlId])
+  @@unique([companyId, controlId, countryId])
   @@map("controls")
 }
 
@@ -236,6 +236,7 @@ model Issue {
   status       IssueStatus @default(open)
   evidenceUrl  String?
   createdAt    DateTime    @default(now())
+  testerClosed Boolean     @default(false)
 
   company    Company     @relation(fields: [companyId], references: [id])
   country    Country     @relation(fields: [countryId], references: [id])
