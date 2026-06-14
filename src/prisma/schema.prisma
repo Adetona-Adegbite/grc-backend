@@ -107,6 +107,7 @@ model Control {
   nature      Nature
   type        ControlType
   testDueDay  Int           @default(15)
+  testDueDate DateTime?
   status      ControlStatus @default(active)
   createdAt   DateTime      @default(now())
 
@@ -161,6 +162,8 @@ model TestResult {
   result        TestResultStatus
   testProcedure String?
   evidenceUrl   String?
+  evidenceUrls  String[]         @default([])
+  recommendation String?
   comments      String?
   testedAt      DateTime         @default(now())
   createdAt     DateTime         @default(now())

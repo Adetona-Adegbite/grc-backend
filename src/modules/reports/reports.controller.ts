@@ -116,6 +116,7 @@ export const getMonthlyReport = async (
           select: {
             controlId: true,
             name: true,
+            description: true,
             domain: true,
           },
         },
@@ -181,12 +182,21 @@ export const getMonthlyReport = async (
       testDate: t.testedAt,
       controlId: t.control.controlId,
       controlName: t.control.name,
+      controlDescription: t.control.description,
       domain: t.control.domain,
       tester: t.tester,
       sampleSize: t.sampleSize,
       exceptions: t.exceptions,
       result: t.result,
       evidenceUrl: t.evidenceUrl,
+      evidenceUrls:
+        Array.isArray(t.evidenceUrls) && t.evidenceUrls.length > 0
+          ? t.evidenceUrls
+          : t.evidenceUrl
+            ? [t.evidenceUrl]
+            : [],
+      comments: t.comments,
+      recommendation: t.recommendation,
     }));
 
     const issues = await prisma.issue.findMany({
@@ -199,7 +209,9 @@ export const getMonthlyReport = async (
         },
       },
       include: {
-        control: { select: { controlId: true } },
+        control: {
+          select: { controlId: true, name: true, description: true },
+        },
         owner: { select: { fullName: true, email: true } },
       },
       orderBy: { createdAt: "asc" },
@@ -208,6 +220,8 @@ export const getMonthlyReport = async (
     const issuesData = issues.map((i: any) => ({
       issueId: i.issueId,
       controlId: i.control.controlId,
+      controlName: i.control.name,
+      controlDescription: i.control.description,
       description: i.description,
       severity: i.severity,
       status: i.status,

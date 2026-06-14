@@ -39,8 +39,23 @@ const getLastDayOfMonth = (period: string): string => {
 const getDueDate = (period: string, testDueDay: number): string => {
   const [year, month] = period.split("-").map(Number) as [number, number];
   const lastDay = new Date(year, month, 0).getDate();
-  const day = Math.min(testDueDay, lastDay);
+  // Clamp into [1, lastDay] so a testDueDay of 0 doesn't produce an invalid
+  // "YYYY-MM-00" date that breaks Date parsing on the client.
+  const day = Math.min(Math.max(testDueDay, 1), lastDay);
   return `${period}-${String(day).padStart(2, "0")}`;
+};
+
+// Resolve a control's due date: an explicit calendar testDueDate (which may
+// fall in another month) takes precedence over the day-of-month testDueDay.
+const resolveDueDate = (
+  period: string,
+  testDueDay: number,
+  testDueDate: Date | null,
+): string => {
+  if (testDueDate) {
+    return new Date(testDueDate).toISOString().slice(0, 10);
+  }
+  return getDueDate(period, testDueDay);
 };
 
 export const getTestPlan = async (
@@ -99,7 +114,6 @@ export const getTestPlan = async (
     } else if (role === "tester") {
       controlFilter.testerId = userId;
     }
-    console.log("Control FIlter", controlFilter);
 
     // Fetch active controls for this country
     const controls = await prisma.control.findMany({
@@ -119,14 +133,10 @@ export const getTestPlan = async (
       },
     });
 
-    console.log("All Controls", controls);
-
     // Filter controls that are due this month
     const dueControls = controls.filter((control: any) =>
       isControlDue(control.frequency, month, company.financialYearStart)
     );
-
-    console.log("Due Controls", dueControls);
 
     // Build test plan entries
     const testPlan = dueControls.map((control: any) => {
@@ -143,7 +153,11 @@ export const getTestPlan = async (
         type: control.type,
         owner: control.owner,
         assignedTester,
-        dueDate: getDueDate(month, control.testDueDay),
+        dueDate: resolveDueDate(
+          month,
+          control.testDueDay,
+          control.testDueDate,
+        ),
         status: testResult ? testResult.result : "pending",
         testResult: testResult
           ? {
@@ -158,7 +172,8 @@ export const getTestPlan = async (
       };
     });
 
-    console.log("Test Plan", testPlan);
+    // Ascending by due date — soonest-due first
+    testPlan.sort((a: any, b: any) => a.dueDate.localeCompare(b.dueDate));
 
     res.status(200).json({ data: testPlan, error: null });
   } catch (error) {

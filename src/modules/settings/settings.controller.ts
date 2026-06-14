@@ -14,8 +14,13 @@ const VALID_DOMAINS = [
   "Taxation",
   "Treasury",
   "Sustainability",
+  "Expenditure",
   "Operations",
 ];
+
+// Natural sort so control IDs order like 1.1, 1.2, 1.10 (not 1.1, 1.10, 1.2)
+const naturalControlIdCompare = (a: string, b: string): number =>
+  a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
 
 export const getControls = async (
   req: Request,
@@ -26,9 +31,15 @@ export const getControls = async (
 
     const controls = await prisma.control.findMany({
       where: { companyId },
-      include: { owner: { select: { id: true, fullName: true, email: true } } },
+      include: {
+        owner: { select: { id: true, fullName: true, email: true } },
+        tester: { select: { id: true, fullName: true, email: true } },
+      },
       orderBy: { controlId: "asc" },
     });
+
+    // Natural sort (1.1, 1.2, ... 1.10) since DB string sort is lexicographic
+    controls.sort((a, b) => naturalControlIdCompare(a.controlId, b.controlId));
 
     res.status(200).json({ data: controls, error: null });
   } catch (error) {
@@ -54,6 +65,7 @@ export const createControl = async (
       nature,
       type,
       testDueDay,
+      testDueDate,
       countryId,
       status,
     } = req.body;
@@ -120,7 +132,12 @@ export const createControl = async (
               frequency: frequency as any,
               nature: nature as any,
               type: type as any,
-              testDueDay: testDueDay || 15,
+              // Keep the day-of-month in sync with the calendar date (used by
+              // overdue calculations); fall back to the legacy day or 15.
+              testDueDay: testDueDate
+                ? new Date(testDueDate).getUTCDate()
+                : (testDueDay ?? 15),
+              testDueDate: testDueDate ? new Date(testDueDate) : null,
               ownerId: ownerId || null,
               testerId: testerId || null,
               status: (status as any) || "active",
@@ -155,7 +172,12 @@ export const createControl = async (
         frequency: frequency as any,
         nature: nature as any,
         type: type as any,
-        testDueDay: testDueDay || 15,
+        // Keep the day-of-month in sync with the calendar date (used by
+        // overdue calculations); fall back to the legacy day or 15.
+        testDueDay: testDueDate
+          ? new Date(testDueDate).getUTCDate()
+          : (testDueDay ?? 15),
+        testDueDate: testDueDate ? new Date(testDueDate) : null,
         ownerId: ownerId || null,
         testerId: testerId || null,
         status: (status as any) || "active",
@@ -185,6 +207,7 @@ export const updateControl = async (
     const companyId = req.user!.companyId;
     const { id } = req.params as { id: string };
     const {
+      controlId,
       name,
       domain,
       risk,
@@ -195,9 +218,11 @@ export const updateControl = async (
       nature,
       type,
       testDueDay,
+      testDueDate,
       countryId,
       status,
     } = req.body as {
+      controlId?: string;
       name?: string;
       domain?: string;
       risk?: string;
@@ -208,6 +233,7 @@ export const updateControl = async (
       nature?: string;
       type?: string;
       testDueDay?: number;
+      testDueDate?: string | null;
       countryId?: string;
       status?: string;
     };
@@ -229,9 +255,34 @@ export const updateControl = async (
       return;
     }
 
+    // If the controlId (or country) changes, enforce the per-entity uniqueness
+    if (
+      (controlId !== undefined && controlId !== existing.controlId) ||
+      (countryId !== undefined && countryId !== existing.countryId)
+    ) {
+      const effControlId = controlId ?? existing.controlId;
+      const effCountryId = countryId ?? existing.countryId;
+      const clash = await prisma.control.findFirst({
+        where: {
+          companyId,
+          controlId: effControlId,
+          countryId: effCountryId,
+          NOT: { id },
+        },
+      });
+      if (clash) {
+        res.status(409).json({
+          data: null,
+          error: "A control with that ID already exists for this entity",
+        });
+        return;
+      }
+    }
+
     const control = await prisma.control.update({
       where: { id },
       data: {
+        ...(controlId !== undefined && { controlId }),
         ...(name !== undefined && { name }),
         ...(domain !== undefined && { domain }),
         ...(risk !== undefined && { risk }),
@@ -239,11 +290,24 @@ export const updateControl = async (
         ...(frequency !== undefined && { frequency: frequency as any }),
         ...(nature !== undefined && { nature: nature as any }),
         ...(type !== undefined && { type: type as any }),
-        ...(testDueDay !== undefined && { testDueDay }),
+        ...(testDueDate !== undefined && {
+          testDueDate: testDueDate ? new Date(testDueDate) : null,
+        }),
+        // When a calendar date is set it drives the day-of-month too; otherwise
+        // honour an explicit testDueDay (legacy/API callers).
+        ...(testDueDate
+          ? { testDueDay: new Date(testDueDate).getUTCDate() }
+          : testDueDay !== undefined
+            ? { testDueDay }
+            : {}),
         ...(countryId !== undefined && { countryId }),
         ...(status !== undefined && { status: status as any }),
         ...(ownerId !== undefined && { ownerId: ownerId || null }),
         ...(testerId !== undefined && { testerId: testerId || null }),
+      },
+      include: {
+        owner: { select: { id: true, fullName: true, email: true } },
+        tester: { select: { id: true, fullName: true, email: true } },
       },
     });
 
@@ -279,7 +343,26 @@ export const deleteControl = async (
       return;
     }
 
-    await prisma.control.delete({ where: { id } });
+    // A control may have dependent rows (test results, issues with their
+    // actions, test-plan overrides). Remove them in a transaction first so the
+    // delete doesn't fail on a foreign-key constraint.
+    const issues = await prisma.issue.findMany({
+      where: { controlId: id, companyId },
+      select: { id: true },
+    });
+    const issueIds = issues.map((i) => i.id);
+
+    await prisma.$transaction([
+      ...(issueIds.length
+        ? [prisma.action.deleteMany({ where: { issueId: { in: issueIds } } })]
+        : []),
+      prisma.issue.deleteMany({ where: { controlId: id, companyId } }),
+      prisma.testResult.deleteMany({ where: { controlId: id, companyId } }),
+      prisma.testPlanOverride.deleteMany({
+        where: { controlId: id, companyId },
+      }),
+      prisma.control.delete({ where: { id } }),
+    ]);
 
     await logAudit({
       companyId,
