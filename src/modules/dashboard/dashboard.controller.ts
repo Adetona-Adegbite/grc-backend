@@ -162,6 +162,12 @@ export const getDashboard = async (
       const passCount = testResults.filter(
         (t: any) => t.result === "pass",
       ).length;
+      const exceptionCount = testResults.filter(
+        (t: any) => t.result === "exception",
+      ).length;
+      const failCount = testResults.filter(
+        (t: any) => t.result === "fail",
+      ).length;
       const totalTested = testResults.length;
       const passRate =
         totalTested > 0 ? Math.round((passCount / totalTested) * 100) : 0;
@@ -225,6 +231,9 @@ export const getDashboard = async (
           controlsDueThisMonth,
           overdueCount,
           passCount,
+          exceptionCount,
+          failCount,
+          totalTested,
           passRate,
           openIssuesCount: openIssues.length,
           criticalIssuesCount: openIssues.filter(
@@ -253,6 +262,12 @@ export const getDashboard = async (
       const passCount = testResults.filter(
         (t: any) => t.result === "pass",
       ).length;
+      const exceptionCount = testResults.filter(
+        (t: any) => t.result === "exception",
+      ).length;
+      const failCount = testResults.filter(
+        (t: any) => t.result === "fail",
+      ).length;
       const totalTested = testResults.length;
       const passRate =
         totalTested > 0 ? Math.round((passCount / totalTested) * 100) : 0;
@@ -269,6 +284,8 @@ export const getDashboard = async (
           totalControls,
           passRate,
           passCount,
+          exceptionCount,
+          failCount,
           totalTested,
           openIssuesCount: openIssues.length,
           criticalIssuesCount: openIssues.filter(

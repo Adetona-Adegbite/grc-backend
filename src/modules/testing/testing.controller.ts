@@ -125,6 +125,8 @@ export const logTest = async (req: Request, res: Response): Promise<void> => {
       result,
       testProcedure,
       evidenceUrl,
+      evidenceUrls,
+      recommendation,
       comments,
     } = req.body as {
       controlId: string;
@@ -137,8 +139,19 @@ export const logTest = async (req: Request, res: Response): Promise<void> => {
       result: string;
       testProcedure?: string;
       evidenceUrl?: string;
+      evidenceUrls?: string[];
+      recommendation?: string;
       comments?: string;
     };
+
+    // Support both the legacy single evidenceUrl and the new multi-file array.
+    const normalizedEvidenceUrls = Array.isArray(evidenceUrls)
+      ? evidenceUrls.filter((u): u is string => typeof u === "string" && !!u)
+      : evidenceUrl
+        ? [evidenceUrl]
+        : [];
+    // Keep the legacy single column populated (first file) for back-compat.
+    const primaryEvidenceUrl = normalizedEvidenceUrls[0] ?? evidenceUrl;
 
     if (
       !controlId ||
@@ -192,7 +205,11 @@ export const logTest = async (req: Request, res: Response): Promise<void> => {
         exceptions: Number(exceptions),
         result: result as any,
         ...(testProcedure !== undefined && { testProcedure }),
-        ...(evidenceUrl !== undefined && { evidenceUrl }),
+        ...(primaryEvidenceUrl !== undefined && {
+          evidenceUrl: primaryEvidenceUrl,
+        }),
+        evidenceUrls: normalizedEvidenceUrls,
+        ...(recommendation !== undefined && { recommendation }),
         ...(comments !== undefined && { comments }),
       },
     });

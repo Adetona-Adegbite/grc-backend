@@ -4,3 +4,9 @@ node_modules
 
 /generated/prisma
 /dist
+
+# Runtime-uploaded evidence (keep dirs, ignore contents)
+/uploads/tests/*
+/uploads/issues/*
+!/uploads/tests/.gitkeep
+!/uploads/issues/.gitkeep
