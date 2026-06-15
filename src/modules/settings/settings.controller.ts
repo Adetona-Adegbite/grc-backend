@@ -15,6 +15,7 @@ const VALID_DOMAINS = [
   "Treasury",
   "Sustainability",
   "Operations",
+  "Expenditure",
 ];
 
 export const getControls = async (
@@ -82,6 +83,7 @@ export const createControl = async (
 
     const existing = await prisma.control.findUnique({
       where: { companyId_controlId: { companyId, controlId } },
+      include: { owner: { select: { id: true, fullName: true, email: true } } },
     });
 
     if (existing) {
@@ -183,6 +185,7 @@ export const updateControl = async (
     const companyId = req.user!.companyId;
     const { id } = req.params as { id: string };
     const {
+      controlId,
       name,
       domain,
       risk,
@@ -196,6 +199,7 @@ export const updateControl = async (
       countryId,
       status,
     } = req.body as {
+      controlId: string;
       name?: string;
       domain?: string;
       risk?: string;
@@ -229,7 +233,9 @@ export const updateControl = async (
 
     const control = await prisma.control.update({
       where: { id },
+      include: { owner: { select: { id: true, fullName: true, email: true } } },
       data: {
+        ...(controlId !== undefined && { controlId }),
         ...(name !== undefined && { name }),
         ...(domain !== undefined && { domain }),
         ...(risk !== undefined && { risk }),
