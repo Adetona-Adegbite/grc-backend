@@ -97,7 +97,7 @@ model Control {
   companyId   String
   countryId   String
   controlId   String
-  description String        
+  description String
   name        String
   domain      String
   risk        String
@@ -107,6 +107,7 @@ model Control {
   nature      Nature
   type        ControlType
   testDueDay  Int           @default(15)
+  testDueDate DateTime?
   status      ControlStatus @default(active)
   createdAt   DateTime      @default(now())
 
@@ -118,7 +119,7 @@ model Control {
   testResults       TestResult[]
   issues            Issue[]
 
-  @@unique([companyId, controlId])
+  @@unique([companyId, controlId, countryId])
   @@map("controls")
 }
 
@@ -161,6 +162,8 @@ model TestResult {
   result        TestResultStatus
   testProcedure String?
   evidenceUrl   String?
+  evidenceUrls  String[]         @default([])
+  recommendation String?
   comments      String?
   testedAt      DateTime         @default(now())
   createdAt     DateTime         @default(now())
@@ -236,6 +239,7 @@ model Issue {
   status       IssueStatus @default(open)
   evidenceUrl  String?
   createdAt    DateTime    @default(now())
+  testerClosed Boolean     @default(false)
 
   company    Company     @relation(fields: [companyId], references: [id])
   country    Country     @relation(fields: [countryId], references: [id])

@@ -7,12 +7,51 @@ const router = Router();
 
 router.use(authenticate);
 
+// Upload multiple test-evidence files at once (field: "test_evidence")
+router.post(
+  "/test-evidence-multiple",
+  (req: Request, res: Response, next: NextFunction) => {
+    upload.array("test_evidence", 10)(req, res, (err) => {
+      if (err instanceof multer.MulterError) {
+        if (err.code === "LIMIT_FILE_SIZE") {
+          res.status(400).json({
+            data: null,
+            error: "File too large. Maximum size is 10MB",
+          });
+          return;
+        }
+        res.status(400).json({ data: null, error: err.message });
+        return;
+      }
+      if (err) {
+        res.status(400).json({ data: null, error: err.message });
+        return;
+      }
+
+      const files = (req.files as Express.Multer.File[] | undefined) ?? [];
+      if (files.length === 0) {
+        res.status(400).json({ data: null, error: "No files uploaded" });
+        return;
+      }
+
+      res.status(201).json({
+        data: files.map((file) => ({
+          url: `/uploads/tests/${file.filename}`,
+          filename: file.filename,
+          originalName: file.originalname,
+          size: file.size,
+          mimetype: file.mimetype,
+        })),
+        error: null,
+      });
+    });
+  },
+);
+
 router.post(
   "/test-evidence",
   (req: Request, res: Response, next: NextFunction) => {
     upload.single("test_evidence")(req, res, (err) => {
-      console.log(req.file, err);
-
       if (err instanceof multer.MulterError) {
         if (err.code === "LIMIT_FILE_SIZE") {
           res.status(400).json({

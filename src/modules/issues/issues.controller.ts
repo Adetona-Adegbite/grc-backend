@@ -15,7 +15,7 @@ const computeRAG = (dueDate: Date | null, status: string): string => {
   const today = new Date();
   const due = new Date(dueDate);
   const diffDays = Math.ceil(
-    (due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+    (due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
   );
 
   if (diffDays < 0) return "red";
@@ -56,7 +56,7 @@ export const getIssues = async (req: Request, res: Response): Promise<void> => {
       ...issue,
       age: Math.ceil(
         (new Date().getTime() - new Date(issue.createdAt).getTime()) /
-          (1000 * 60 * 60 * 24)
+          (1000 * 60 * 60 * 24),
       ),
       rag: computeRAG(issue.dueDate, issue.status),
     }));
@@ -69,7 +69,7 @@ export const getIssues = async (req: Request, res: Response): Promise<void> => {
 
 export const createIssue = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
@@ -112,6 +112,7 @@ export const createIssue = async (
         severity: (severity as any) || "medium",
         ownerId: ownerId || control.ownerId || null,
         status: "open",
+        testerClosed: false,
         ...(dueDate !== undefined && { dueDate: new Date(dueDate) }),
       },
     });
@@ -133,23 +134,65 @@ export const createIssue = async (
 
 export const updateIssue = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
+    const userRole = req.user!.role;
     const { id } = req.params as { id: string };
-    const { severity, status, ownerId, dueDate, description } = req.body as {
-      severity?: string;
-      status?: string;
-      ownerId?: string;
-      dueDate?: string;
-      description?: string;
-    };
+    const { severity, status, ownerId, dueDate, description, testerClosed } =
+      req.body as {
+        severity?: string;
+        status?: string;
+        ownerId?: string;
+        dueDate?: string;
+        description?: string;
+        testerClosed?: boolean;
+      };
 
     const existing = await prisma.issue.findFirst({ where: { id, companyId } });
 
     if (!existing) {
       res.status(404).json({ data: null, error: "Issue not found" });
+      return;
+    }
+
+    // Role-based status transition guards
+    if (
+      status === "closed" &&
+      userRole !== "control_owner" &&
+      userRole !== "admin"
+    ) {
+      res.status(403).json({
+        data: null,
+        error: "Only a control owner can fully close an issue",
+      });
+      return;
+    }
+
+    // Tester can only set testerClosed, not directly set status to closed
+    if (
+      testerClosed === true &&
+      userRole !== "tester" &&
+      userRole !== "admin"
+    ) {
+      res.status(403).json({
+        data: null,
+        error: "Only a tester can mark an issue as tester-closed",
+      });
+      return;
+    }
+
+    // Control owner can only confirm close if tester has already closed it
+    if (
+      status === "closed" &&
+      !existing.testerClosed &&
+      userRole === "control_owner"
+    ) {
+      res.status(400).json({
+        data: null,
+        error: "Tester must close the issue before a control owner can confirm",
+      });
       return;
     }
 
@@ -161,12 +204,21 @@ export const updateIssue = async (
         ...(ownerId !== undefined && { ownerId }),
         ...(dueDate !== undefined && { dueDate: new Date(dueDate) }),
         ...(description !== undefined && { description }),
+        ...(testerClosed !== undefined && { testerClosed }),
       },
     });
+
+    const actionLabel =
+      testerClosed === true
+        ? "Issue marked for close by tester"
+        : status === "closed"
+          ? "Issue closed (confirmed by owner)"
+          : "Issue updated";
+
     await logAudit({
       companyId,
       userId: req.user!.userId,
-      action: "Issue updated",
+      action: actionLabel,
       entityType: "issue",
       entityId: issue.id,
       detail: `${issue.issueId} — ${issue.status}`,
@@ -205,7 +257,7 @@ export const getIssue = async (req: Request, res: Response): Promise<void> => {
       ...issue,
       age: Math.ceil(
         (new Date().getTime() - new Date(issue.createdAt).getTime()) /
-          (1000 * 60 * 60 * 24)
+          (1000 * 60 * 60 * 24),
       ),
       rag: computeRAG(issue.dueDate, issue.status),
     };
