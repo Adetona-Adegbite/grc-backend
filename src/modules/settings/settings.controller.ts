@@ -16,7 +16,6 @@ const VALID_DOMAINS = [
   "Sustainability",
   "Expenditure",
   "Operations",
-  "Expenditure",
 ];
 
 // Natural sort so control IDs order like 1.1, 1.2, 1.10 (not 1.1, 1.10, 1.2)
@@ -247,6 +246,16 @@ export const updateControl = async (
       return;
     }
 
+    // Normalize + validate the Control ID when it's being changed.
+    const normalizedControlId =
+      controlId !== undefined ? controlId.trim() : undefined;
+    if (normalizedControlId !== undefined && normalizedControlId === "") {
+      res
+        .status(400)
+        .json({ data: null, error: "Control ID cannot be empty" });
+      return;
+    }
+
     const existing = await prisma.control.findFirst({
       where: { id, companyId },
     });
@@ -258,10 +267,11 @@ export const updateControl = async (
 
     // If the controlId (or country) changes, enforce the per-entity uniqueness
     if (
-      (controlId !== undefined && controlId !== existing.controlId) ||
+      (normalizedControlId !== undefined &&
+        normalizedControlId !== existing.controlId) ||
       (countryId !== undefined && countryId !== existing.countryId)
     ) {
-      const effControlId = controlId ?? existing.controlId;
+      const effControlId = normalizedControlId ?? existing.controlId;
       const effCountryId = countryId ?? existing.countryId;
       const clash = await prisma.control.findFirst({
         where: {
@@ -282,9 +292,10 @@ export const updateControl = async (
 
     const control = await prisma.control.update({
       where: { id },
-      include: { owner: { select: { id: true, fullName: true, email: true } } },
       data: {
-        ...(controlId !== undefined && { controlId }),
+        ...(normalizedControlId !== undefined && {
+          controlId: normalizedControlId,
+        }),
         ...(name !== undefined && { name }),
         ...(domain !== undefined && { domain }),
         ...(risk !== undefined && { risk }),

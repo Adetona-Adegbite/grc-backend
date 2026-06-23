@@ -73,10 +73,15 @@ export const sendInvite = async (
 
     const inviteLink = `${process.env.FRONTEND_URL}/accept-invite?token=${invite.token}`;
 
-    await sendEmail({
-      to: email,
-      subject: `You've been invited to join ${company?.name} on GRC Control Tool`,
-      html: `
+    // The invite already exists in the DB at this point. Don't fail the whole
+    // request (and risk duplicate invites on retry) just because email is down
+    // — report it instead so the admin can share the link manually.
+    let emailSent = true;
+    try {
+      await sendEmail({
+        to: email,
+        subject: `You've been invited to join ${company?.name} on GRC Control Tool`,
+        html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
           <h2>You've been invited</h2>
           <p>You have been invited to join <strong>${
@@ -99,11 +104,25 @@ export const sendInvite = async (
           </p>
         </div>
       `,
-    });
+      });
+    } catch (emailErr) {
+      emailSent = false;
+      console.error(
+        "[invite] created but email failed to send —",
+        emailErr instanceof Error ? emailErr.message : emailErr,
+      );
+    }
 
-    res
-      .status(201)
-      .json({ data: { message: "Invite sent successfully" }, error: null });
+    res.status(201).json({
+      data: {
+        message: emailSent
+          ? "Invite sent successfully"
+          : "Invite created, but the email could not be sent. Share the link below manually or check the email settings.",
+        inviteLink,
+        emailSent,
+      },
+      error: null,
+    });
   } catch (error) {
     console.error("Error Sending Invite:", error);
     res.status(500).json({ data: null, error: "Internal server error" });
