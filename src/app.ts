@@ -23,6 +23,11 @@ import path from "path";
 
 const app = express();
 
+// Behind a reverse proxy (ngrok / load balancer) the client IP arrives in the
+// X-Forwarded-For header. Trust the first proxy hop so express-rate-limit can
+// read the real IP instead of throwing ERR_ERL_UNEXPECTED_X_FORWARDED_FOR.
+app.set("trust proxy", 1);
+
 app.use(helmet());
 
 app.use(
