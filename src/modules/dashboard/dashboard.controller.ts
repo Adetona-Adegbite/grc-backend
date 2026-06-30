@@ -46,7 +46,8 @@ export const getDashboard = async (
       const failCount = currentPeriodTests.filter(
         (t: any) => t.result === "fail",
       ).length;
-      const exceptionCount = currentPeriodTests.filter(
+      // Total exceptions across ALL periods (not just the current month)
+      const exceptionCount = assignedTests.filter(
         (t: any) => t.result === "exception",
       ).length;
       const totalTested = currentPeriodTests.length;
@@ -162,9 +163,15 @@ export const getDashboard = async (
       const passCount = testResults.filter(
         (t: any) => t.result === "pass",
       ).length;
-      const exceptionCount = testResults.filter(
-        (t: any) => t.result === "exception",
-      ).length;
+      // Total exceptions across ALL periods for this owner's controls
+      const exceptionCount = await prisma.testResult.count({
+        where: {
+          companyId,
+          controlId: { in: myControlIds.length > 0 ? myControlIds : [""] },
+          result: "exception" as any,
+          ...countryWhere,
+        },
+      });
       const failCount = testResults.filter(
         (t: any) => t.result === "fail",
       ).length;
@@ -262,9 +269,10 @@ export const getDashboard = async (
       const passCount = testResults.filter(
         (t: any) => t.result === "pass",
       ).length;
-      const exceptionCount = testResults.filter(
-        (t: any) => t.result === "exception",
-      ).length;
+      // Total exceptions across ALL periods for the company
+      const exceptionCount = await prisma.testResult.count({
+        where: { companyId, result: "exception" as any, ...countryWhere },
+      });
       const failCount = testResults.filter(
         (t: any) => t.result === "fail",
       ).length;
@@ -335,9 +343,10 @@ export const getDashboard = async (
     const passCount = testResults.filter(
       (t: any) => t.result === "pass",
     ).length;
-    const exceptionCount = testResults.filter(
-      (t: any) => t.result === "exception",
-    ).length;
+    // Total exceptions across ALL periods for the company
+    const exceptionCount = await prisma.testResult.count({
+      where: { companyId, result: "exception" as any, ...countryWhere },
+    });
     const failCount = testResults.filter(
       (t: any) => t.result === "fail",
     ).length;
