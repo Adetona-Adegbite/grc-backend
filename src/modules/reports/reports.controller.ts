@@ -185,6 +185,7 @@ export const getMonthlyReport = async (
       controlDescription: t.control.description,
       domain: t.control.domain,
       tester: t.tester,
+      testProcedure: t.testProcedure,
       sampleSize: t.sampleSize,
       exceptions: t.exceptions,
       result: t.result,

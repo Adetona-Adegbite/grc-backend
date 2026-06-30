@@ -3,9 +3,22 @@ import { Request } from "express";
 import { prisma } from "../../config/prisma";
 import { logAudit } from "../../utils/auditLog";
 
-const generateActionId = async (companyId: string): Promise<string> => {
-  const count = await prisma.action.count({ where: { companyId } });
-  return `ACT-${String(count + 1).padStart(3, "0")}`;
+// Based on the MAX existing number (not a count) so deleted actions don't
+// cause "ACT-00x already exists" collisions.
+const generateActionId = async (
+  companyId: string,
+  offset = 0,
+): Promise<string> => {
+  const actions = await prisma.action.findMany({
+    where: { companyId },
+    select: { actionId: true },
+  });
+  let max = 0;
+  for (const a of actions) {
+    const n = parseInt(String(a.actionId).replace(/\D/g, ""), 10);
+    if (!isNaN(n) && n > max) max = n;
+  }
+  return `ACT-${String(max + 1 + offset).padStart(3, "0")}`;
 };
 
 export const getActions = async (

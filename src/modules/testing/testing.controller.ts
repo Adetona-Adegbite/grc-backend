@@ -4,10 +4,23 @@ import { createIssueHelper } from "../../utils/createIssue";
 import { prisma } from "../../config/prisma";
 import { logAudit } from "../../utils/auditLog";
 
-// Helper — generate test ID like T001, T002
-const generateTestId = async (companyId: string): Promise<string> => {
-  const count = await prisma.testResult.count({ where: { companyId } });
-  return `T${String(count + 1).padStart(3, "0")}`;
+// Helper — generate test ID like T001, T002.
+// Based on the MAX existing number (not a count) so deletions don't cause
+// collisions, with an offset to retry past a clash under concurrency.
+const generateTestId = async (
+  companyId: string,
+  offset = 0,
+): Promise<string> => {
+  const results = await prisma.testResult.findMany({
+    where: { companyId },
+    select: { testId: true },
+  });
+  let max = 0;
+  for (const r of results) {
+    const n = parseInt(r.testId.replace(/\D/g, ""), 10);
+    if (!isNaN(n) && n > max) max = n;
+  }
+  return `T${String(max + 1 + offset).padStart(3, "0")}`;
 };
 
 export const getAvailableControls = async (
@@ -189,30 +202,53 @@ export const logTest = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const testId = await generateTestId(companyId);
-
-    const testResult = await prisma.testResult.create({
-      data: {
-        testId,
-        companyId,
-        countryId,
-        controlId,
-        testerId,
-        period,
-        testName,
-        population: Number(population),
-        sampleSize: Number(sampleSize),
-        exceptions: Number(exceptions),
-        result: result as any,
-        ...(testProcedure !== undefined && { testProcedure }),
-        ...(primaryEvidenceUrl !== undefined && {
-          evidenceUrl: primaryEvidenceUrl,
-        }),
-        evidenceUrls: normalizedEvidenceUrls,
-        ...(recommendation !== undefined && { recommendation }),
-        ...(comments !== undefined && { comments }),
-      },
+    const buildData = (testId: string) => ({
+      testId,
+      companyId,
+      countryId,
+      controlId,
+      testerId,
+      period,
+      testName,
+      population: Number(population),
+      sampleSize: Number(sampleSize),
+      exceptions: Number(exceptions),
+      result: result as any,
+      ...(testProcedure !== undefined && { testProcedure }),
+      ...(primaryEvidenceUrl !== undefined && {
+        evidenceUrl: primaryEvidenceUrl,
+      }),
+      evidenceUrls: normalizedEvidenceUrls,
+      ...(recommendation !== undefined && { recommendation }),
+      ...(comments !== undefined && { comments }),
     });
+
+    // Retry past a testId clash (concurrent submits / stale numbering).
+    let testResult;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const testId = await generateTestId(companyId, attempt);
+      try {
+        testResult = await prisma.testResult.create({
+          data: buildData(testId),
+        });
+        break;
+      } catch (err: any) {
+        const target = err?.meta?.target;
+        const isTestIdClash =
+          err?.code === "P2002" &&
+          (Array.isArray(target)
+            ? target.includes("testId")
+            : String(target ?? "").includes("testId"));
+        if (isTestIdClash && attempt < 4) continue; // try the next number
+        throw err; // a different error (e.g. duplicate period) — let it surface
+      }
+    }
+    if (!testResult) {
+      res
+        .status(409)
+        .json({ data: null, error: "Could not allocate a test ID, retry" });
+      return;
+    }
 
     if (result === "exception" || result === "fail") {
       await createIssueHelper({
@@ -237,6 +273,7 @@ export const logTest = async (req: Request, res: Response): Promise<void> => {
 
     res.status(201).json({ data: testResult, error: null });
   } catch (error) {
+    console.error("[logTest] error:", error);
     res.status(500).json({ data: null, error: "Internal server error" });
   }
 };

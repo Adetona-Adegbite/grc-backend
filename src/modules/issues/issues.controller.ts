@@ -3,9 +3,22 @@ import { Request } from "express";
 import { prisma } from "../../config/prisma";
 import { logAudit } from "../../utils/auditLog";
 
-const generateIssueId = async (companyId: string): Promise<string> => {
-  const count = await prisma.issue.count({ where: { companyId } });
-  return `ISS-${String(count + 1).padStart(3, "0")}`;
+// Based on the MAX existing number (not a count) so deleted issues don't cause
+// "ISS-00x already exists" collisions.
+const generateIssueId = async (
+  companyId: string,
+  offset = 0,
+): Promise<string> => {
+  const issues = await prisma.issue.findMany({
+    where: { companyId },
+    select: { issueId: true },
+  });
+  let max = 0;
+  for (const i of issues) {
+    const n = parseInt(String(i.issueId).replace(/\D/g, ""), 10);
+    if (!isNaN(n) && n > max) max = n;
+  }
+  return `ISS-${String(max + 1 + offset).padStart(3, "0")}`;
 };
 
 const computeRAG = (dueDate: Date | null, status: string): string => {
