@@ -1,7 +1,7 @@
 import dotenv from "dotenv";
 import { validateEnv } from "./config/env";
 
-dotenv.config();
+dotenv.config({ override: true });
 
 validateEnv();
 import app from "./app";
