@@ -1,6 +1,8 @@
 import dotenv from "dotenv";
 
-dotenv.config();
+// override:true makes the .env file authoritative, so a stale value cached in
+// the process/pm2 environment (e.g. an old FRONTEND_URL) can't shadow it.
+dotenv.config({ override: true });
 
 const requiredEnvVars = [
   "DATABASE_URL",
