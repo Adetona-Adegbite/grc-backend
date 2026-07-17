@@ -1,46 +1,10 @@
 import { Response, Request } from "express";
 import { prisma } from "../../config/prisma";
-
-const isControlDueInMonth = (
-  frequency: string,
-  monthNum: number,
-  financialYearStart: number,
-): boolean => {
-  if (frequency === "monthly") return true;
-
-  if (frequency === "annual") {
-    return monthNum === financialYearStart;
-  }
-
-  if (frequency === "quarterly") {
-    const diff = (monthNum - financialYearStart + 12) % 12;
-    return diff % 3 === 0;
-  }
-
-  if (frequency === "semi_annually") {
-    const diff = (monthNum - financialYearStart + 12) % 12;
-    return diff % 6 === 0;
-  }
-
-  if (frequency === "as_needed") return false;
-
-  return false;
-};
-
-const MONTH_NAMES = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
+import {
+  MONTH_NAMES,
+  isControlDueInMonth,
+  buildFinancialYearMonths,
+} from "../../utils/schedule";
 
 export const getCalendar = async (
   req: Request,
@@ -92,22 +56,19 @@ export const getCalendar = async (
     });
 
     // Build 12 months starting from financial year start
-    const calendar = Array.from({ length: 12 }, (_, i) => {
-      const monthNum = ((financialYearStart - 1 + i) % 12) + 1;
-
-      // Determine year for this month
-      const monthYear =
-        monthNum >= financialYearStart ? currentYear : currentYear + 1;
-
+    const calendar = buildFinancialYearMonths(
+      financialYearStart,
+      currentYear,
+    ).map(({ month, monthNum, year: monthYear, period }) => {
       const dueControls = controls.filter((control: any) =>
         isControlDueInMonth(control.frequency, monthNum, financialYearStart),
       );
 
       return {
-        month: MONTH_NAMES[monthNum - 1],
+        month,
         monthNum,
         year: monthYear,
-        period: `${monthYear}-${String(monthNum).padStart(2, "0")}`,
+        period,
         totalControls: dueControls.length,
         controls: dueControls.map((c: any) => ({
           controlId: c.controlId,

@@ -3,6 +3,7 @@ import { authenticate, requireRole } from "../../middleware/authenticate";
 import {
   getAvailableControls,
   logTest,
+  updateTest,
   getTestResults,
   getTestHistory,
 } from "./testing.controller";
@@ -14,6 +15,9 @@ router.use(authenticate);
 router.get("/available", getAvailableControls);
 
 router.post("/log", logTest);
+
+// Testers can edit their own submissions; admins can edit any.
+router.patch("/:id", requireRole("admin", "tester"), updateTest);
 
 router.get("/results", getTestResults);
 

@@ -278,6 +278,159 @@ export const logTest = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
+// Edit a already-submitted test. Testers may only touch their own submissions;
+// there is deliberately no cut-off period.
+export const updateTest = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const companyId = req.user!.companyId;
+    const userId = req.user!.userId;
+    const role = req.user!.role;
+    const { id } = req.params as { id: string };
+
+    const existing = await prisma.testResult.findFirst({
+      where: { id, companyId },
+      include: { control: true },
+    });
+
+    if (!existing) {
+      res.status(404).json({ data: null, error: "Test not found" });
+      return;
+    }
+
+    if (role === "tester" && existing.testerId !== userId) {
+      res
+        .status(403)
+        .json({ data: null, error: "You can only edit your own tests" });
+      return;
+    }
+
+    const {
+      testName,
+      population,
+      sampleSize,
+      exceptions,
+      result,
+      testProcedure,
+      evidenceUrls,
+      recommendation,
+      comments,
+    } = req.body ?? {};
+
+    if (
+      result !== undefined &&
+      !["pass", "exception", "fail"].includes(String(result))
+    ) {
+      res
+        .status(400)
+        .json({ data: null, error: "result must be pass, exception or fail" });
+      return;
+    }
+    if (testName !== undefined && !String(testName).trim()) {
+      res.status(400).json({ data: null, error: "testName cannot be empty" });
+      return;
+    }
+    for (const [label, value] of [
+      ["population", population],
+      ["sampleSize", sampleSize],
+      ["exceptions", exceptions],
+    ] as const) {
+      if (value !== undefined && (isNaN(Number(value)) || Number(value) < 0)) {
+        res
+          .status(400)
+          .json({ data: null, error: `${label} must be a positive number` });
+        return;
+      }
+    }
+
+    const normalizedEvidenceUrls = Array.isArray(evidenceUrls)
+      ? evidenceUrls.filter((u): u is string => typeof u === "string" && !!u)
+      : undefined;
+
+    const updated = await prisma.testResult.update({
+      where: { id },
+      data: {
+        ...(testName !== undefined && { testName: String(testName).trim() }),
+        ...(population !== undefined && { population: Number(population) }),
+        ...(sampleSize !== undefined && { sampleSize: Number(sampleSize) }),
+        ...(exceptions !== undefined && { exceptions: Number(exceptions) }),
+        ...(result !== undefined && { result: result as any }),
+        ...(testProcedure !== undefined && { testProcedure }),
+        ...(recommendation !== undefined && { recommendation }),
+        ...(comments !== undefined && { comments }),
+        ...(normalizedEvidenceUrls !== undefined && {
+          evidenceUrls: normalizedEvidenceUrls,
+          // Keep the legacy single column in step with the array.
+          evidenceUrl: normalizedEvidenceUrls[0] ?? null,
+        }),
+      },
+      include: {
+        control: { select: { controlId: true, name: true, domain: true } },
+        tester: { select: { id: true, fullName: true, email: true } },
+      },
+    });
+
+    // Keep the linked issue consistent with the edited result.
+    const wasPass = existing.result === "pass";
+    const isPass = updated.result === "pass";
+
+    if (!wasPass && isPass) {
+      // Cleared on re-test — close the issue this test raised.
+      await prisma.issue.updateMany({
+        where: { testResultId: id, status: { not: "closed" } },
+        data: { status: "closed" },
+      });
+    } else if (wasPass && !isPass) {
+      // Now failing: mirror what a fresh submission would have done.
+      const linked = await prisma.issue.findMany({
+        where: { testResultId: id },
+      });
+      const severity = updated.result === "fail" ? "high" : "medium";
+      if (linked.length === 0) {
+        await createIssueHelper({
+          companyId,
+          countryId: existing.countryId,
+          controlId: existing.controlId,
+          testResultId: id,
+          description: `Control ${existing.control.controlId} — ${existing.control.name} recorded a ${updated.result} result for period ${existing.period}.`,
+          severity,
+          ownerId: existing.control.ownerId,
+        });
+      } else {
+        await prisma.issue.updateMany({
+          where: { testResultId: id },
+          data: { status: "open", severity: severity as any },
+        });
+      }
+    } else if (!wasPass && !isPass && existing.result !== updated.result) {
+      // exception <-> fail: keep severity in step, but don't reopen a closure.
+      await prisma.issue.updateMany({
+        where: { testResultId: id },
+        data: { severity: (updated.result === "fail" ? "high" : "medium") as any },
+      });
+    }
+
+    await logAudit({
+      companyId,
+      userId,
+      action: "Test edited",
+      entityType: "test",
+      entityId: id,
+      detail:
+        existing.result !== updated.result
+          ? `${existing.control.controlId} — result changed ${existing.result} → ${updated.result} for ${existing.period}`
+          : `${existing.control.controlId} — test details updated for ${existing.period}`,
+    });
+
+    res.status(200).json({ data: updated, error: null });
+  } catch (error) {
+    console.error("[updateTest] error:", error);
+    res.status(500).json({ data: null, error: "Internal server error" });
+  }
+};
+
 export const getTestResults = async (
   req: Request,
   res: Response,
@@ -300,11 +453,17 @@ export const getTestResults = async (
       return;
     }
 
-    // Testers only see their own test results
-    const testerWhere = role === "tester" ? { testerId: userId } : {};
+    // Testers only see their own test results; control owners see every test
+    // carried out on the controls they own.
+    const scopeWhere =
+      role === "tester"
+        ? { testerId: userId }
+        : role === "control_owner"
+          ? { control: { ownerId: userId } }
+          : {};
 
     const results = await prisma.testResult.findMany({
-      where: { companyId, ...countryWhere, ...testerWhere, period: month },
+      where: { companyId, ...countryWhere, ...scopeWhere, period: month },
       include: {
         control: { select: { controlId: true, name: true, domain: true } },
         tester: { select: { id: true, fullName: true, email: true } },

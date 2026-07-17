@@ -28,6 +28,8 @@ model User {
   ownedIssues       Issue[]            @relation("IssueOwner")
   ownedActions      Action[]           @relation("ActionOwner")
   auditLogs         AuditLog[]
+  createdAudits     Audit[]            @relation("AuditCreatedBy")
+  createdAuditIssues AuditIssue[]      @relation("AuditIssueCreatedBy")
 
   @@map("users")
 }
@@ -50,6 +52,9 @@ model Company {
   issues            Issue[]
   actions           Action[]
   auditLogs         AuditLog[]
+  audits            Audit[]
+  auditPeriods      AuditPeriod[]
+  auditIssues       AuditIssue[]
 
   @@map("companies")
 }
@@ -87,6 +92,7 @@ model Country {
   controls    Control[]
   testResults TestResult[]
   issues      Issue[]
+  audits      Audit[]
 
   @@unique([companyId, code])
   @@map("countries")
@@ -118,6 +124,7 @@ model Control {
   testPlanOverrides TestPlanOverride[]
   testResults       TestResult[]
   issues            Issue[]
+  audits            Audit[]
 
   @@unique([companyId, controlId, countryId])
   @@map("controls")
@@ -304,4 +311,77 @@ model AuditLog {
   user    User    @relation(fields: [userId], references: [id])
 
   @@map("audit_logs")
+}
+
+// An audit engagement raised against a control that has failed tests.
+// Frequency is not stored: it is always read from the audited control so the
+// audit can never drift from the control's schedule.
+model Audit {
+  id          String   @id @default(uuid())
+  auditId     String
+  companyId   String
+  countryId   String
+  controlId   String
+  areaProcess String?
+  auditName   String
+  objectives  String?
+  scope       String?
+  keyRisks    String?
+  lead        String?
+  procedures  String?
+  startMonth  String
+  dueDay      Int      @default(15)
+  createdById String
+  createdAt   DateTime @default(now())
+
+  company   Company       @relation(fields: [companyId], references: [id])
+  country   Country       @relation(fields: [countryId], references: [id])
+  control   Control       @relation(fields: [controlId], references: [id])
+  createdBy User          @relation("AuditCreatedBy", fields: [createdById], references: [id])
+  periods   AuditPeriod[]
+
+  @@unique([companyId, auditId])
+  @@unique([companyId, controlId])
+  @@map("audits")
+}
+
+// One occurrence of an audit for a single period, carrying that period's own
+// evidence and issues.
+model AuditPeriod {
+  id           String    @id @default(uuid())
+  auditId      String
+  companyId    String
+  period       String
+  dueDate      DateTime?
+  evidenceUrls String[]  @default([])
+  createdAt    DateTime  @default(now())
+
+  audit   Audit        @relation(fields: [auditId], references: [id])
+  company Company      @relation(fields: [companyId], references: [id])
+  issues  AuditIssue[]
+
+  @@unique([auditId, period])
+  @@map("audit_periods")
+}
+
+// Audit findings live only in the Audit tab and are deliberately separate from
+// the Issue model used by test exceptions.
+model AuditIssue {
+  id            String      @id @default(uuid())
+  auditIssueId  String
+  companyId     String
+  auditPeriodId String
+  description   String
+  severity      Severity    @default(medium)
+  status        IssueStatus @default(open)
+  evidenceUrls  String[]    @default([])
+  createdById   String
+  createdAt     DateTime    @default(now())
+
+  company     Company     @relation(fields: [companyId], references: [id])
+  auditPeriod AuditPeriod @relation(fields: [auditPeriodId], references: [id])
+  createdBy   User        @relation("AuditIssueCreatedBy", fields: [createdById], references: [id])
+
+  @@unique([companyId, auditIssueId])
+  @@map("audit_issues")
 }
