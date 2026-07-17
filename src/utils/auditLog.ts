@@ -12,7 +12,9 @@ interface AuditLogParams {
     | "country"
     | "invite"
     | "user"
-    | "company";
+    | "company"
+    | "audit"
+    | "audit_issue";
   entityId: string;
   detail?: string;
 }
