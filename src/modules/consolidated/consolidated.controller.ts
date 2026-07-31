@@ -77,16 +77,18 @@ export const getConsolidated = async (
             period: currentPeriod,
             controlId: { in: dueControlIds },
           },
-          select: { result: true },
+          select: { result: true, exceptions: true },
         });
 
         const totalDue = dueControls.length;
         const passCount = testResults.filter(
           (t: any) => t.result === "pass",
         ).length;
-        const exceptionCount = testResults.filter(
-          (t: any) => t.result === "exception",
-        ).length;
+        // Failed ITEMS, not failed tests.
+        const exceptionCount = testResults.reduce(
+          (sum: number, t: any) => sum + (t.exceptions ?? 0),
+          0,
+        );
         const failCount = testResults.filter(
           (t: any) => t.result === "fail",
         ).length;

@@ -182,6 +182,17 @@ export const logTest = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
+    // "exception" was merged into "fail". A browser still running the old
+    // bundle will keep sending it, so map it rather than 500 on the enum.
+    const normalizedResult = result === "exception" ? "fail" : result;
+
+    if (!["pass", "fail"].includes(String(normalizedResult))) {
+      res
+        .status(400)
+        .json({ data: null, error: "result must be pass or fail" });
+      return;
+    }
+
     const control = await prisma.control.findFirst({
       where: { id: controlId, companyId },
     });
@@ -214,7 +225,7 @@ export const logTest = async (req: Request, res: Response): Promise<void> => {
       population: Number(population),
       sampleSize: Number(sampleSize),
       exceptions: Number(exceptions),
-      result: result as any,
+      result: normalizedResult as any,
       ...(testProcedure !== undefined && { testProcedure }),
       ...(primaryEvidenceUrl !== undefined && {
         evidenceUrl: primaryEvidenceUrl,
@@ -251,14 +262,14 @@ export const logTest = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    if (result === "exception" || result === "fail") {
+    if (normalizedResult === "fail") {
       await createIssueHelper({
         companyId,
         countryId,
         controlId,
         testResultId: testResult.id,
-        description: `Control ${control.controlId} — ${control.name} recorded a ${result} result for period ${period}.`,
-        severity: result === "fail" ? "high" : "medium",
+        description: `Control ${control.controlId} — ${control.name} recorded a ${normalizedResult} result for period ${period}.`,
+        severity: "high",
         ownerId: control.ownerId,
       });
     }
@@ -305,7 +316,7 @@ export const logTest = async (req: Request, res: Response): Promise<void> => {
             <tr><td style="padding: 4px 12px 4px 0; color: #555;">Control</td><td><strong>${control.controlId} — ${control.name}</strong></td></tr>
             <tr><td style="padding: 4px 12px 4px 0; color: #555;">Period</td><td>${period}</td></tr>
             <tr><td style="padding: 4px 12px 4px 0; color: #555;">Result</td><td><strong>${testResult.result.toUpperCase()}</strong></td></tr>
-            <tr><td style="padding: 4px 12px 4px 0; color: #555;">Exceptions</td><td>${testResult.exceptions} of ${testResult.sampleSize} sampled</td></tr>
+            <tr><td style="padding: 4px 12px 4px 0; color: #555;">Failed items</td><td>${testResult.exceptions} of ${testResult.sampleSize} sampled</td></tr>
           </table>
           <a href="${appUrl}/testing" style="
             display: inline-block;
@@ -372,13 +383,16 @@ export const updateTest = async (
       comments,
     } = req.body ?? {};
 
+    const normalizedEditResult =
+      result === "exception" ? "fail" : result;
+
     if (
-      result !== undefined &&
-      !["pass", "exception", "fail"].includes(String(result))
+      normalizedEditResult !== undefined &&
+      !["pass", "fail"].includes(String(normalizedEditResult))
     ) {
       res
         .status(400)
-        .json({ data: null, error: "result must be pass, exception or fail" });
+        .json({ data: null, error: "result must be pass or fail" });
       return;
     }
     if (testName !== undefined && !String(testName).trim()) {
@@ -409,7 +423,9 @@ export const updateTest = async (
         ...(population !== undefined && { population: Number(population) }),
         ...(sampleSize !== undefined && { sampleSize: Number(sampleSize) }),
         ...(exceptions !== undefined && { exceptions: Number(exceptions) }),
-        ...(result !== undefined && { result: result as any }),
+        ...(normalizedEditResult !== undefined && {
+          result: normalizedEditResult as any,
+        }),
         ...(testProcedure !== undefined && { testProcedure }),
         ...(recommendation !== undefined && { recommendation }),
         ...(comments !== undefined && { comments }),
@@ -440,7 +456,6 @@ export const updateTest = async (
       const linked = await prisma.issue.findMany({
         where: { testResultId: id },
       });
-      const severity = updated.result === "fail" ? "high" : "medium";
       if (linked.length === 0) {
         await createIssueHelper({
           companyId,
@@ -448,21 +463,15 @@ export const updateTest = async (
           controlId: existing.controlId,
           testResultId: id,
           description: `Control ${existing.control.controlId} — ${existing.control.name} recorded a ${updated.result} result for period ${existing.period}.`,
-          severity,
+          severity: "high",
           ownerId: existing.control.ownerId,
         });
       } else {
         await prisma.issue.updateMany({
           where: { testResultId: id },
-          data: { status: "open", severity: severity as any },
+          data: { status: "open", severity: "high" as any },
         });
       }
-    } else if (!wasPass && !isPass && existing.result !== updated.result) {
-      // exception <-> fail: keep severity in step, but don't reopen a closure.
-      await prisma.issue.updateMany({
-        where: { testResultId: id },
-        data: { severity: (updated.result === "fail" ? "high" : "medium") as any },
-      });
     }
 
     await logAudit({

@@ -19,7 +19,7 @@ const generateRecommendations = (
     );
   }
   if (exceptionCount > 0) {
-    recommendations.push("Exceptions noted. Review and document rationale.");
+    recommendations.push("Failed items noted. Review and document rationale.");
   }
   if (openIssuesCount > 0) {
     recommendations.push("Open issues require attention.");
@@ -132,9 +132,12 @@ export const getMonthlyReport = async (
     const passCount = testResults.filter(
       (t: any) => t.result === "pass",
     ).length;
-    const exceptionCount = testResults.filter(
-      (t: any) => t.result === "exception",
-    ).length;
+    // Failed ITEMS, not failed tests: the per-test count of sampled items that
+    // failed, summed across the period.
+    const exceptionCount = testResults.reduce(
+      (sum: number, t: any) => sum + (t.exceptions ?? 0),
+      0,
+    );
     const failCount = testResults.filter(
       (t: any) => t.result === "fail",
     ).length;
@@ -166,7 +169,7 @@ export const getMonthlyReport = async (
       }
       domainMap[domain]!.totalTests += 1;
       if (t.result === "pass") domainMap[domain]!.passCount += 1;
-      if (t.result === "exception") domainMap[domain]!.exceptionCount += 1;
+      domainMap[domain]!.exceptionCount += t.exceptions ?? 0;
       if (t.result === "fail") domainMap[domain]!.failCount += 1;
     });
 
