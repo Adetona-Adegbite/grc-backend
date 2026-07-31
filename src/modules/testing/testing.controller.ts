@@ -3,6 +3,7 @@ import { Request } from "express";
 import { createIssueHelper } from "../../utils/createIssue";
 import { prisma } from "../../config/prisma";
 import { logAudit } from "../../utils/auditLog";
+import { sendEmail } from "../../utils/email";
 
 // Helper — generate test ID like T001, T002.
 // Based on the MAX existing number (not a count) so deletions don't cause
@@ -270,6 +271,58 @@ export const logTest = async (req: Request, res: Response): Promise<void> => {
       entityId: testResult.id,
       detail: `${control.controlId} — ${testResult.result.charAt(0).toUpperCase() + testResult.result.slice(1)}`,
     });
+
+    // Let the control owner know their control has been tested. Never let a
+    // mail failure fail the submission itself.
+    if (control.ownerId) {
+      try {
+        const [owner, tester, company] = await Promise.all([
+          prisma.user.findUnique({
+            where: { id: control.ownerId },
+            select: { email: true, fullName: true },
+          }),
+          prisma.user.findUnique({
+            where: { id: testerId },
+            select: { email: true, fullName: true },
+          }),
+          prisma.company.findUnique({
+            where: { id: companyId },
+            select: { name: true },
+          }),
+        ]);
+
+        if (owner?.email) {
+          const appUrl = process.env.FRONTEND_URL ?? "";
+          await sendEmail({
+            to: owner.email,
+            subject: `Control ${control.controlId} has been tested — ${testResult.result.toUpperCase()}`,
+            html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>Testing completed on your control</h2>
+          <p><strong>${tester?.fullName ?? tester?.email ?? "A tester"}</strong> has completed testing on a control you own at
+          <strong>${company?.name ?? "your organisation"}</strong>.</p>
+          <table style="border-collapse: collapse; margin: 16px 0; font-size: 14px;">
+            <tr><td style="padding: 4px 12px 4px 0; color: #555;">Control</td><td><strong>${control.controlId} — ${control.name}</strong></td></tr>
+            <tr><td style="padding: 4px 12px 4px 0; color: #555;">Period</td><td>${period}</td></tr>
+            <tr><td style="padding: 4px 12px 4px 0; color: #555;">Result</td><td><strong>${testResult.result.toUpperCase()}</strong></td></tr>
+            <tr><td style="padding: 4px 12px 4px 0; color: #555;">Exceptions</td><td>${testResult.exceptions} of ${testResult.sampleSize} sampled</td></tr>
+          </table>
+          <a href="${appUrl}/testing" style="
+            display: inline-block;
+            padding: 12px 24px;
+            background-color: #2563eb;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            margin-top: 16px;
+          ">View Testing</a>
+        </div>`,
+          });
+        }
+      } catch (err) {
+        console.error("[logTest] owner notification failed:", err);
+      }
+    }
 
     res.status(201).json({ data: testResult, error: null });
   } catch (error) {

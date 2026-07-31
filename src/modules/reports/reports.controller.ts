@@ -11,19 +11,21 @@ const generateRecommendations = (
 ): string[] => {
   const recommendations: string[] = [];
 
+  // Plain text only — the UI renders its own icon. Emoji render inconsistently
+  // across platforms and a tick against a problem reads as "all good".
   if (passRate < 80) {
     recommendations.push(
-      "⚠ Pass rate of " + passRate + "% is below acceptable threshold.",
+      "Pass rate of " + passRate + "% is below acceptable threshold.",
     );
   }
   if (exceptionCount > 0) {
-    recommendations.push("💡 Exceptions noted. Review and document rationale.");
+    recommendations.push("Exceptions noted. Review and document rationale.");
   }
   if (openIssuesCount > 0) {
-    recommendations.push("💡 Open issues require attention.");
+    recommendations.push("Open issues require attention.");
   }
   if (coverage < 100) {
-    recommendations.push("✅ Control coverage needs improvement.");
+    recommendations.push("Control coverage needs improvement.");
   }
 
   return recommendations;

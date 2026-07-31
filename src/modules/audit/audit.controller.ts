@@ -2,6 +2,7 @@ import { Response } from "express";
 import { Request } from "express";
 import { prisma } from "../../config/prisma";
 import { logAudit } from "../../utils/auditLog";
+import { sendEmail } from "../../utils/email";
 import {
   MONTH_NAMES,
   isControlDueInMonth,
@@ -9,10 +10,14 @@ import {
   dueDateFor,
 } from "../../utils/schedule";
 
-// An audit is raised off a control that has failing test results. Both
-// "exception" and "fail" count: fail is the higher-severity of the two, so
-// excluding it would hide the worst findings from the audit tab.
+// Any control can be audited. Failed-test counts are still surfaced so the
+// person picking a control can see which ones already have findings — both
+// "exception" and "fail" count, since fail is the higher-severity of the two.
 const FAILED_RESULTS = ["exception", "fail"] as const;
+
+// Audits are carried out by testers (and admins). A control owner is a
+// respondent: they only ever see audits addressed to them.
+const isResponder = (role: string) => role === "control_owner";
 
 const PERIOD_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -106,6 +111,16 @@ const shapeAudit = (audit: any, financialYearStart: number, year: number) => ({
   startMonth: audit.startMonth,
   dueDay: audit.dueDay,
   createdAt: audit.createdAt,
+  recipient: audit.recipient ?? null,
+  comments: (audit.comments ?? []).map((c: any) => ({
+    id: c.id,
+    message: c.message,
+    period: c.period,
+    isRequest: c.isRequest,
+    evidenceUrls: c.evidenceUrls,
+    createdAt: c.createdAt,
+    author: c.author,
+  })),
   // Frequency always comes from the control, never stored on the audit.
   frequency: audit.control.frequency,
   control: {
@@ -150,8 +165,41 @@ const getFinancialYearStart = async (companyId: string) => {
   return company?.financialYearStart ?? 1;
 };
 
-// Controls with at least one failing test, which don't already have an audit
-// (one audit per control).
+// Anyone in the company can be picked as the recipient of an audit request.
+export const getRecipients = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const companyId = req.user!.companyId;
+    const members = await prisma.userCompany.findMany({
+      where: { companyId },
+      include: {
+        user: { select: { id: true, fullName: true, email: true } },
+      },
+    });
+
+    res.status(200).json({
+      data: members
+        .map((m: any) => ({
+          id: m.user.id,
+          fullName: m.user.fullName,
+          email: m.user.email,
+          role: m.role,
+        }))
+        .sort((a: any, b: any) =>
+          (a.fullName ?? a.email).localeCompare(b.fullName ?? b.email),
+        ),
+      error: null,
+    });
+  } catch (error) {
+    console.error("[getRecipients] error:", error);
+    res.status(500).json({ data: null, error: "Internal server error" });
+  }
+};
+
+// Every active control can be audited; only ones that don't already have an
+// audit are offered, because a control carries at most one audit.
 export const getFailedControls = async (
   req: Request,
   res: Response,
@@ -167,7 +215,6 @@ export const getFailedControls = async (
         companyId,
         ...countryWhere,
         status: "active",
-        testResults: { some: { result: { in: FAILED_RESULTS as any } } },
         audits: { none: {} },
       },
       select: {
@@ -209,6 +256,8 @@ export const getFailedControls = async (
 export const getAudit = async (req: Request, res: Response): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
+    const userId = req.user!.userId;
+    const role = req.user!.role;
     const { country_id, year } = req.query as {
       country_id?: string;
       year?: string;
@@ -219,10 +268,20 @@ export const getAudit = async (req: Request, res: Response): Promise<void> => {
     const currentYear = year ? parseInt(year) : new Date().getFullYear();
     const financialYearStart = await getFinancialYearStart(companyId);
 
+    // Responders see only what was addressed to them, never other audits.
+    const recipientWhere = isResponder(role) ? { recipientId: userId } : {};
+
     const audits = await prisma.audit.findMany({
-      where: { companyId, ...countryWhere },
+      where: { companyId, ...countryWhere, ...recipientWhere },
       include: {
         control: true,
+        recipient: { select: { id: true, fullName: true, email: true } },
+        comments: {
+          include: {
+            author: { select: { id: true, fullName: true, email: true } },
+          },
+          orderBy: { createdAt: "asc" },
+        },
         periods: {
           include: {
             issues: {
@@ -268,6 +327,7 @@ export const createAudit = async (
       procedures,
       startMonth,
       dueDay,
+      recipientId,
     } = req.body ?? {};
 
     if (!controlId || typeof controlId !== "string") {
@@ -294,25 +354,24 @@ export const createAudit = async (
 
     const control = await prisma.control.findFirst({
       where: { id: controlId, companyId },
-      include: {
-        _count: {
-          select: {
-            testResults: { where: { result: { in: FAILED_RESULTS as any } } },
-          },
-        },
-      },
     });
 
     if (!control) {
       res.status(404).json({ data: null, error: "Control not found" });
       return;
     }
-    if (control._count.testResults === 0) {
-      res.status(400).json({
-        data: null,
-        error: "Audits can only be raised against controls with failed tests",
+
+    // The recipient may be any user in the company.
+    if (recipientId) {
+      const recipient = await prisma.userCompany.findFirst({
+        where: { userId: String(recipientId), companyId },
       });
-      return;
+      if (!recipient) {
+        res
+          .status(400)
+          .json({ data: null, error: "Recipient is not a member of this company" });
+        return;
+      }
     }
 
     let created: any;
@@ -337,6 +396,7 @@ export const createAudit = async (
               startMonth: String(startMonth),
               dueDay: day,
               createdById: userId,
+              ...(recipientId ? { recipientId: String(recipientId) } : {}),
               ...(areaProcess !== undefined && { areaProcess }),
               ...(objectives !== undefined && { objectives }),
               ...(scope !== undefined && { scope }),
@@ -372,7 +432,12 @@ export const createAudit = async (
     const financialYearStart = await getFinancialYearStart(companyId);
     const full = await prisma.audit.findUnique({
       where: { id: created.id },
-      include: { control: true, periods: { include: { issues: true } } },
+      include: {
+        control: true,
+        recipient: { select: { id: true, fullName: true, email: true } },
+        comments: true,
+        periods: { include: { issues: true } },
+      },
     });
 
     res.status(201).json({
@@ -403,6 +468,7 @@ export const updateAudit = async (
       procedures,
       startMonth,
       dueDay,
+      recipientId,
     } = req.body ?? {};
 
     const existing = await prisma.audit.findFirst({
@@ -445,6 +511,9 @@ export const updateAudit = async (
         ...(procedures !== undefined && { procedures }),
         ...(startMonth !== undefined && { startMonth: String(startMonth) }),
         ...(dueDay !== undefined && { dueDay: Number(dueDay) }),
+        ...(recipientId !== undefined && {
+          recipientId: recipientId ? String(recipientId) : null,
+        }),
       },
     });
 
@@ -462,6 +531,13 @@ export const updateAudit = async (
       where: { id },
       include: {
         control: true,
+        recipient: { select: { id: true, fullName: true, email: true } },
+        comments: {
+          include: {
+            author: { select: { id: true, fullName: true, email: true } },
+          },
+          orderBy: { createdAt: "asc" },
+        },
         periods: {
           include: {
             issues: {
@@ -511,6 +587,7 @@ export const deleteAudit = async (
           where: { auditPeriodId: { in: periodIds } },
         });
       }
+      await tx.auditComment.deleteMany({ where: { auditId: id } });
       await tx.auditPeriod.deleteMany({ where: { auditId: id } });
       await tx.audit.delete({ where: { id } });
     });
@@ -561,6 +638,7 @@ const loadAuditForPeriod = async (
   companyId: string,
   id: string,
   period: string,
+  actor?: { userId: string; role: string },
 ) => {
   if (!PERIOD_RE.test(period)) {
     res
@@ -575,6 +653,12 @@ const loadAuditForPeriod = async (
   });
   if (!audit) {
     res.status(404).json({ data: null, error: "Audit not found" });
+    return null;
+  }
+
+  // A responder may only act on audits addressed to them.
+  if (actor && isResponder(actor.role) && audit.recipientId !== actor.userId) {
+    res.status(403).json({ data: null, error: "Access denied" });
     return null;
   }
 
@@ -618,7 +702,10 @@ export const addPeriodEvidence = async (
       return;
     }
 
-    const loaded = await loadAuditForPeriod(res, companyId, id, period);
+    const loaded = await loadAuditForPeriod(res, companyId, id, period, {
+      userId,
+      role: req.user!.role,
+    });
     if (!loaded) return;
 
     const updated = await prisma.$transaction(async (tx: any) => {
@@ -641,6 +728,127 @@ export const addPeriodEvidence = async (
     res.status(201).json({ data: updated, error: null });
   } catch (error) {
     console.error("[addPeriodEvidence] error:", error);
+    res.status(500).json({ data: null, error: "Internal server error" });
+  }
+};
+
+// Post a comment on an audit. Flagging it as a request is the ONLY thing that
+// emails the recipient — creating an audit on its own never notifies anyone.
+export const createAuditComment = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const companyId = req.user!.companyId;
+    const userId = req.user!.userId;
+    const role = req.user!.role;
+    const { id } = req.params as { id: string };
+    const { message, period, isRequest, evidenceUrls } = req.body ?? {};
+
+    if (!message || !String(message).trim()) {
+      res.status(400).json({ data: null, error: "message is required" });
+      return;
+    }
+    if (period !== undefined && period !== null && !PERIOD_RE.test(String(period))) {
+      res
+        .status(400)
+        .json({ data: null, error: "period must be in YYYY-MM format" });
+      return;
+    }
+
+    const audit = await prisma.audit.findFirst({
+      where: { id, companyId },
+      include: {
+        control: true,
+        recipient: { select: { id: true, fullName: true, email: true } },
+      },
+    });
+    if (!audit) {
+      res.status(404).json({ data: null, error: "Audit not found" });
+      return;
+    }
+    if (isResponder(role) && audit.recipientId !== userId) {
+      res.status(403).json({ data: null, error: "Access denied" });
+      return;
+    }
+
+    const comment = await prisma.auditComment.create({
+      data: {
+        auditId: id,
+        companyId,
+        authorId: userId,
+        message: String(message).trim(),
+        isRequest: Boolean(isRequest),
+        ...(period ? { period: String(period) } : {}),
+        ...(Array.isArray(evidenceUrls) && {
+          evidenceUrls: evidenceUrls.map(String),
+        }),
+      },
+      include: {
+        author: { select: { id: true, fullName: true, email: true } },
+      },
+    });
+
+    // Notify the recipient only when this was explicitly sent as a request.
+    let emailSent = false;
+    let emailError: string | null = null;
+    if (comment.isRequest && audit.recipient?.email) {
+      const company = await prisma.company.findUnique({
+        where: { id: companyId },
+        select: { name: true },
+      });
+      const appUrl = process.env.FRONTEND_URL ?? "";
+      try {
+        await sendEmail({
+          to: audit.recipient.email,
+          subject: `Action required: ${audit.auditId} — ${audit.auditName}`,
+          html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>You have a new audit request</h2>
+          <p><strong>${comment.author.fullName ?? comment.author.email}</strong> has requested information for an audit on
+          <strong>${company?.name ?? "your organisation"}</strong>'s GRC Control Tool.</p>
+          <table style="border-collapse: collapse; margin: 16px 0; font-size: 14px;">
+            <tr><td style="padding: 4px 12px 4px 0; color: #555;">Audit</td><td><strong>${audit.auditId} — ${audit.auditName}</strong></td></tr>
+            <tr><td style="padding: 4px 12px 4px 0; color: #555;">Control</td><td>${audit.control.controlId} — ${audit.control.name}</td></tr>
+            ${comment.period ? `<tr><td style="padding: 4px 12px 4px 0; color: #555;">Period</td><td>${comment.period}</td></tr>` : ""}
+          </table>
+          <p style="background: #f6f6f6; border-left: 3px solid #2563eb; padding: 12px; white-space: pre-wrap;">${comment.message}</p>
+          <p>Log in to the GRC Control Tool to respond and upload the requested documents.</p>
+          <a href="${appUrl}/audit" style="
+            display: inline-block;
+            padding: 12px 24px;
+            background-color: #2563eb;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            margin-top: 16px;
+          ">Open Audit</a>
+        </div>`,
+        });
+        emailSent = true;
+      } catch (err) {
+        // The comment is already saved — never lose it because mail failed.
+        emailError = err instanceof Error ? err.message : "Email failed";
+      }
+    }
+
+    await logAudit({
+      companyId,
+      userId,
+      action: comment.isRequest ? "request_sent" : "commented",
+      entityType: "audit",
+      entityId: id,
+      detail: comment.isRequest
+        ? `Request sent on ${audit.auditId} to ${audit.recipient?.email ?? "no recipient"}`
+        : `Comment added on ${audit.auditId}`,
+    });
+
+    res.status(201).json({
+      data: { ...comment, emailSent, emailError },
+      error: null,
+    });
+  } catch (error) {
+    console.error("[createAuditComment] error:", error);
     res.status(500).json({ data: null, error: "Internal server error" });
   }
 };
