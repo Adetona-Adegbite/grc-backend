@@ -29,7 +29,9 @@ model User {
   ownedActions      Action[]           @relation("ActionOwner")
   auditLogs         AuditLog[]
   createdAudits     Audit[]            @relation("AuditCreatedBy")
+  receivedAudits    Audit[]            @relation("AuditRecipient")
   createdAuditIssues AuditIssue[]      @relation("AuditIssueCreatedBy")
+  auditComments     AuditComment[]     @relation("AuditCommentAuthor")
 
   @@map("users")
 }
@@ -55,6 +57,7 @@ model Company {
   audits            Audit[]
   auditPeriods      AuditPeriod[]
   auditIssues       AuditIssue[]
+  auditComments     AuditComment[]
 
   @@map("companies")
 }
@@ -332,13 +335,18 @@ model Audit {
   startMonth  String
   dueDay      Int      @default(15)
   createdById String
+  // Who is being asked to respond. Any user may be chosen; the recipient sees
+  // only the audits addressed to them.
+  recipientId String?
   createdAt   DateTime @default(now())
 
-  company   Company       @relation(fields: [companyId], references: [id])
-  country   Country       @relation(fields: [countryId], references: [id])
-  control   Control       @relation(fields: [controlId], references: [id])
-  createdBy User          @relation("AuditCreatedBy", fields: [createdById], references: [id])
+  company   Company        @relation(fields: [companyId], references: [id])
+  country   Country        @relation(fields: [countryId], references: [id])
+  control   Control        @relation(fields: [controlId], references: [id])
+  createdBy User           @relation("AuditCreatedBy", fields: [createdById], references: [id])
+  recipient User?          @relation("AuditRecipient", fields: [recipientId], references: [id])
   periods   AuditPeriod[]
+  comments  AuditComment[]
 
   @@unique([companyId, auditId])
   @@unique([companyId, controlId])
@@ -384,4 +392,24 @@ model AuditIssue {
 
   @@unique([companyId, auditIssueId])
   @@map("audit_issues")
+}
+
+// Conversation on an audit. A comment flagged as a request emails the audit's
+// recipient — that is the only thing that triggers a notification.
+model AuditComment {
+  id           String   @id @default(uuid())
+  auditId      String
+  companyId    String
+  authorId     String
+  message      String
+  period       String?
+  isRequest    Boolean  @default(false)
+  evidenceUrls String[] @default([])
+  createdAt    DateTime @default(now())
+
+  audit   Audit   @relation(fields: [auditId], references: [id])
+  company Company @relation(fields: [companyId], references: [id])
+  author  User    @relation("AuditCommentAuthor", fields: [authorId], references: [id])
+
+  @@map("audit_comments")
 }
