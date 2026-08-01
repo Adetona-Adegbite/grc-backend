@@ -11,9 +11,8 @@ import {
 } from "../../utils/schedule";
 
 // Any control can be audited. Failed-test counts are still surfaced so the
-// person picking a control can see which ones already have findings — both
-// "exception" and "fail" count, since fail is the higher-severity of the two.
-const FAILED_RESULTS = ["exception", "fail"] as const;
+// person picking a control can see which ones already have findings.
+const FAILED_RESULTS = ["fail"] as const;
 
 // Audits are carried out by testers (and admins). A control owner is a
 // respondent: they only ever see audits addressed to them.

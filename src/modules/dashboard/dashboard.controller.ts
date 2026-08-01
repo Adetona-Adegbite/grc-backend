@@ -34,7 +34,12 @@ export const getDashboard = async (
     if (role === "tester") {
       const assignedTests = await prisma.testResult.findMany({
         where: { companyId, testerId: userId, ...countryWhere },
-        select: { result: true, period: true, controlId: true },
+        select: {
+          result: true,
+          period: true,
+          controlId: true,
+          exceptions: true,
+        },
       });
 
       const currentPeriodTests = assignedTests.filter(
@@ -46,10 +51,13 @@ export const getDashboard = async (
       const failCount = currentPeriodTests.filter(
         (t: any) => t.result === "fail",
       ).length;
-      // Total exceptions across ALL periods (not just the current month)
-      const exceptionCount = assignedTests.filter(
-        (t: any) => t.result === "exception",
-      ).length;
+      // Total failed ITEMS across ALL periods (not just the current month).
+      // This sums the per-test count of items that failed, not the number of
+      // tests — a single test can contribute many failures.
+      const exceptionCount = assignedTests.reduce(
+        (sum: number, t: any) => sum + (t.exceptions ?? 0),
+        0,
+      );
       const totalTested = currentPeriodTests.length;
       const passRate =
         totalTested > 0 ? Math.round((passCount / totalTested) * 100) : 0;
@@ -163,15 +171,18 @@ export const getDashboard = async (
       const passCount = testResults.filter(
         (t: any) => t.result === "pass",
       ).length;
-      // Total exceptions across ALL periods for this owner's controls
-      const exceptionCount = await prisma.testResult.count({
-        where: {
-          companyId,
-          controlId: { in: myControlIds.length > 0 ? myControlIds : [""] },
-          result: "exception" as any,
-          ...countryWhere,
-        },
-      });
+      // Total failed ITEMS across ALL periods for this owner's controls.
+      const exceptionCount =
+        (
+          await prisma.testResult.aggregate({
+            _sum: { exceptions: true },
+            where: {
+              companyId,
+              controlId: { in: myControlIds.length > 0 ? myControlIds : [""] },
+              ...countryWhere,
+            },
+          })
+        )._sum.exceptions ?? 0;
       const failCount = testResults.filter(
         (t: any) => t.result === "fail",
       ).length;
@@ -269,10 +280,14 @@ export const getDashboard = async (
       const passCount = testResults.filter(
         (t: any) => t.result === "pass",
       ).length;
-      // Total exceptions across ALL periods for the company
-      const exceptionCount = await prisma.testResult.count({
-        where: { companyId, result: "exception" as any, ...countryWhere },
-      });
+      // Total failed ITEMS across ALL periods for the company.
+      const exceptionCount =
+        (
+          await prisma.testResult.aggregate({
+            _sum: { exceptions: true },
+            where: { companyId, ...countryWhere },
+          })
+        )._sum.exceptions ?? 0;
       const failCount = testResults.filter(
         (t: any) => t.result === "fail",
       ).length;
@@ -343,10 +358,14 @@ export const getDashboard = async (
     const passCount = testResults.filter(
       (t: any) => t.result === "pass",
     ).length;
-    // Total exceptions across ALL periods for the company
-    const exceptionCount = await prisma.testResult.count({
-      where: { companyId, result: "exception" as any, ...countryWhere },
-    });
+    // Total failed ITEMS across ALL periods for the company.
+    const exceptionCount =
+      (
+        await prisma.testResult.aggregate({
+          _sum: { exceptions: true },
+          where: { companyId, ...countryWhere },
+        })
+      )._sum.exceptions ?? 0;
     const failCount = testResults.filter(
       (t: any) => t.result === "fail",
     ).length;

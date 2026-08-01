@@ -189,9 +189,12 @@ model TestResult {
   @@map("test_results")
 }
 
+// "Exception" was merged into "fail": the business treats an exception as a
+// failure, and having both invited inconsistent recording. The `exceptions`
+// column below is a COUNT of failed items in the sample, which is a different
+// thing and is surfaced in the UI as "Failed Items".
 enum TestResultStatus {
   pass
-  exception
   fail
 }
 
