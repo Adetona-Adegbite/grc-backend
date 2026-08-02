@@ -3,49 +3,16 @@ import { Request } from "express";
 import { prisma } from "../../config/prisma";
 import { logAudit } from "../../utils/auditLog";
 import { sendEmail } from "../../utils/email";
+import {
+  createDocumentRequest,
+  REQUEST_INCLUDE,
+} from "../../utils/documentRequest";
 
 const PERIOD_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 // Control owners are respondents: they only ever see requests addressed to
 // them, never other people's.
 const isResponder = (role: string) => role === "control_owner";
-
-// Next id based on the MAX existing number (not a count) so deleted rows don't
-// cause "REQ-00x already exists" collisions.
-const nextRequestId = async (tx: any, companyId: string, offset = 0) => {
-  const rows = await tx.documentRequest.findMany({
-    where: { companyId },
-    select: { requestId: true },
-  });
-  let max = 0;
-  for (const row of rows) {
-    const n = parseInt(String(row.requestId).replace(/\D/g, ""), 10);
-    if (!isNaN(n) && n > max) max = n;
-  }
-  return `REQ-${String(max + 1 + offset).padStart(3, "0")}`;
-};
-
-const isIdClash = (err: any) => {
-  const target = err?.meta?.target;
-  return (
-    err?.code === "P2002" &&
-    (Array.isArray(target)
-      ? target.includes("requestId")
-      : String(target ?? "").includes("requestId"))
-  );
-};
-
-const REQUEST_INCLUDE = {
-  control: { select: { id: true, controlId: true, name: true, domain: true } },
-  requester: { select: { id: true, fullName: true, email: true } },
-  recipient: { select: { id: true, fullName: true, email: true } },
-  messages: {
-    include: {
-      author: { select: { id: true, fullName: true, email: true } },
-    },
-    orderBy: { createdAt: "asc" as const },
-  },
-};
 
 const appLink = () => `${process.env.FRONTEND_URL ?? ""}/requests`;
 
@@ -162,59 +129,18 @@ export const createRequest = async (
       return;
     }
 
-    let created: any;
-    for (let attempt = 0; attempt < 5; attempt++) {
-      try {
-        created = await prisma.$transaction(async (tx: any) => {
-          const requestId = await nextRequestId(tx, companyId, attempt);
-          return tx.documentRequest.create({
-            data: {
-              requestId,
-              companyId,
-              countryId: control.countryId,
-              controlId: control.id,
-              period: String(period),
-              requesterId: userId,
-              recipientId: String(recipientId),
-              subject: String(subject).trim(),
-              message: String(message).trim(),
-              ...(dueDate ? { dueDate: new Date(dueDate) } : {}),
-            },
-            include: REQUEST_INCLUDE,
-          });
-        });
-        break;
-      } catch (err: any) {
-        if (isIdClash(err) && attempt < 4) continue;
-        throw err;
-      }
-    }
-
-    // Notify the recipient. Never lose the request because mail failed.
-    let emailSent = false;
-    let emailError: string | null = null;
-    if (recipient.user.email) {
-      const requester = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { fullName: true, email: true },
+    const { request: created, emailSent, emailError } =
+      await createDocumentRequest({
+        companyId,
+        countryId: control.countryId,
+        controlId: control.id,
+        requesterId: userId,
+        recipientId: String(recipientId),
+        period: String(period),
+        subject: String(subject).trim(),
+        message: String(message).trim(),
+        dueDate: dueDate ?? null,
       });
-      try {
-        await sendEmail({
-          to: recipient.user.email,
-          subject: `Document request ${created.requestId}: ${created.subject}`,
-          html: emailShell(
-            "You have a new document request",
-            `<p><strong>${requester?.fullName ?? requester?.email}</strong> has requested information from you.</p>
-             ${detailRows(created)}
-             <p style="background: #f6f6f6; border-left: 3px solid #2563eb; padding: 12px; white-space: pre-wrap;">${created.message}</p>
-             <p>Log in to reply and upload the documents requested.</p>`,
-          ),
-        });
-        emailSent = true;
-      } catch (err) {
-        emailError = err instanceof Error ? err.message : "Email failed";
-      }
-    }
 
     await logAudit({
       companyId,

@@ -193,6 +193,17 @@ export const logTest = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
+    // A test that found failures cannot be recorded as a pass. Agreed with the
+    // client so the pass rate can be relied on.
+    if (normalizedResult === "pass" && Number(exceptions) > 0) {
+      res.status(400).json({
+        data: null,
+        error:
+          "This test recorded failed items, so the result cannot be Pass. Set the result to Fail, or change the number of failed items to 0.",
+      });
+      return;
+    }
+
     const control = await prisma.control.findFirst({
       where: { id: controlId, companyId },
     });
@@ -410,6 +421,21 @@ export const updateTest = async (
           .json({ data: null, error: `${label} must be a positive number` });
         return;
       }
+    }
+
+    // An edit is partial, so check the values the row will actually end up
+    // with, not just the ones supplied in this request.
+    const finalResult = normalizedEditResult ?? existing.result;
+    const finalExceptions =
+      exceptions !== undefined ? Number(exceptions) : existing.exceptions;
+
+    if (finalResult === "pass" && finalExceptions > 0) {
+      res.status(400).json({
+        data: null,
+        error:
+          "This test recorded failed items, so the result cannot be Pass. Set the result to Fail, or change the number of failed items to 0.",
+      });
+      return;
     }
 
     const normalizedEvidenceUrls = Array.isArray(evidenceUrls)
