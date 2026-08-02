@@ -32,6 +32,9 @@ model User {
   receivedAudits    Audit[]            @relation("AuditRecipient")
   createdAuditIssues AuditIssue[]      @relation("AuditIssueCreatedBy")
   auditComments     AuditComment[]     @relation("AuditCommentAuthor")
+  requestsMade      DocumentRequest[]  @relation("RequestRequester")
+  requestsReceived  DocumentRequest[]  @relation("RequestRecipient")
+  requestMessages   DocumentRequestMessage[] @relation("RequestMessageAuthor")
 
   @@map("users")
 }
@@ -58,6 +61,8 @@ model Company {
   auditPeriods      AuditPeriod[]
   auditIssues       AuditIssue[]
   auditComments     AuditComment[]
+  documentRequests  DocumentRequest[]
+  requestMessages   DocumentRequestMessage[]
 
   @@map("companies")
 }
@@ -96,6 +101,7 @@ model Country {
   testResults TestResult[]
   issues      Issue[]
   audits      Audit[]
+  documentRequests DocumentRequest[]
 
   @@unique([companyId, code])
   @@map("countries")
@@ -128,6 +134,7 @@ model Control {
   testResults       TestResult[]
   issues            Issue[]
   audits            Audit[]
+  documentRequests  DocumentRequest[]
 
   @@unique([companyId, controlId, countryId])
   @@map("controls")
@@ -350,6 +357,7 @@ model Audit {
   recipient User?          @relation("AuditRecipient", fields: [recipientId], references: [id])
   periods   AuditPeriod[]
   comments  AuditComment[]
+  requests  DocumentRequest[]
 
   @@unique([companyId, auditId])
   @@unique([companyId, controlId])
@@ -415,4 +423,63 @@ model AuditComment {
   author  User    @relation("AuditCommentAuthor", fields: [authorId], references: [id])
 
   @@map("audit_comments")
+}
+
+// A request from a tester to a control owner for a document or information,
+// anchored to a control and period so it is always clear what it relates to
+// and it stays part of the record. Audits carry their own conversation; this
+// covers everything outside an audit, such as monthly review requests.
+model DocumentRequest {
+  id          String                   @id @default(uuid())
+  requestId   String
+  companyId   String
+  countryId   String
+  controlId   String
+  // Set when the request was raised from an audit, so the Requests tab can
+  // show every outstanding ask in one list while the audit keeps its context.
+  auditId     String?
+  period      String
+  requesterId String
+  recipientId String
+  subject     String
+  message     String
+  dueDate     DateTime?
+  status      RequestStatus            @default(open)
+  // Set once the overdue reminder goes out, so restarts or a job running more
+  // than once can never chase the same person twice.
+  reminderSentAt DateTime?
+  createdAt   DateTime                 @default(now())
+
+  company   Company                  @relation(fields: [companyId], references: [id])
+  country   Country                  @relation(fields: [countryId], references: [id])
+  control   Control                  @relation(fields: [controlId], references: [id])
+  requester User                     @relation("RequestRequester", fields: [requesterId], references: [id])
+  recipient User                     @relation("RequestRecipient", fields: [recipientId], references: [id])
+  audit     Audit?                   @relation(fields: [auditId], references: [id])
+  messages  DocumentRequestMessage[]
+
+  @@unique([companyId, requestId])
+  @@map("document_requests")
+}
+
+model DocumentRequestMessage {
+  id           String   @id @default(uuid())
+  requestId    String
+  companyId    String
+  authorId     String
+  message      String
+  evidenceUrls String[] @default([])
+  createdAt    DateTime @default(now())
+
+  request DocumentRequest @relation(fields: [requestId], references: [id])
+  company Company         @relation(fields: [companyId], references: [id])
+  author  User            @relation("RequestMessageAuthor", fields: [authorId], references: [id])
+
+  @@map("document_request_messages")
+}
+
+enum RequestStatus {
+  open
+  responded
+  closed
 }

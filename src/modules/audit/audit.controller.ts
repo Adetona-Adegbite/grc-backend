@@ -3,6 +3,7 @@ import { Request } from "express";
 import { prisma } from "../../config/prisma";
 import { logAudit } from "../../utils/auditLog";
 import { sendEmail } from "../../utils/email";
+import { createDocumentRequest } from "../../utils/documentRequest";
 import {
   MONTH_NAMES,
   isControlDueInMonth,
@@ -111,6 +112,17 @@ const shapeAudit = (audit: any, financialYearStart: number, year: number) => ({
   dueDay: audit.dueDay,
   createdAt: audit.createdAt,
   recipient: audit.recipient ?? null,
+  requests: (audit.requests ?? []).map((r: any) => ({
+    id: r.id,
+    requestId: r.requestId,
+    subject: r.subject,
+    message: r.message,
+    period: r.period,
+    dueDate: r.dueDate,
+    status: r.status,
+    createdAt: r.createdAt,
+    recipient: r.recipient ?? null,
+  })),
   comments: (audit.comments ?? []).map((c: any) => ({
     id: c.id,
     message: c.message,
@@ -275,6 +287,12 @@ export const getAudit = async (req: Request, res: Response): Promise<void> => {
       include: {
         control: true,
         recipient: { select: { id: true, fullName: true, email: true } },
+        requests: {
+          include: {
+            recipient: { select: { id: true, fullName: true, email: true } },
+          },
+          orderBy: { createdAt: "asc" },
+        },
         comments: {
           include: {
             author: { select: { id: true, fullName: true, email: true } },
@@ -586,6 +604,10 @@ export const deleteAudit = async (
           where: { auditPeriodId: { in: periodIds } },
         });
       }
+      await tx.documentRequest.updateMany({
+        where: { auditId: id },
+        data: { auditId: null },
+      });
       await tx.auditComment.deleteMany({ where: { auditId: id } });
       await tx.auditPeriod.deleteMany({ where: { auditId: id } });
       await tx.audit.delete({ where: { id } });
@@ -742,7 +764,8 @@ export const createAuditComment = async (
     const userId = req.user!.userId;
     const role = req.user!.role;
     const { id } = req.params as { id: string };
-    const { message, period, isRequest, evidenceUrls } = req.body ?? {};
+    const { message, period, isRequest, evidenceUrls, dueDate } =
+      req.body ?? {};
 
     if (!message || !String(message).trim()) {
       res.status(400).json({ data: null, error: "message is required" });
@@ -768,6 +791,47 @@ export const createAuditComment = async (
     }
     if (isResponder(role) && audit.recipientId !== userId) {
       res.status(403).json({ data: null, error: "Access denied" });
+      return;
+    }
+
+    // A request raised on an audit is a real request: it belongs in the
+    // Requests tab, carries a needed-by date and is chased by the same
+    // reminder job. Plain comments stay as audit conversation.
+    if (isRequest) {
+      if (!audit.recipientId) {
+        res.status(400).json({
+          data: null,
+          error: "Set a recipient on this audit before sending a request",
+        });
+        return;
+      }
+
+      const { request, emailSent, emailError } = await createDocumentRequest({
+        companyId,
+        countryId: audit.countryId,
+        controlId: audit.controlId,
+        requesterId: userId,
+        recipientId: audit.recipientId,
+        period: String(period ?? audit.startMonth),
+        subject: `${audit.auditId} — ${audit.auditName}`,
+        message: String(message).trim(),
+        dueDate: dueDate ?? null,
+        auditId: audit.id,
+      });
+
+      await logAudit({
+        companyId,
+        userId,
+        action: "request_sent",
+        entityType: "request",
+        entityId: request.id,
+        detail: `Request ${request.requestId} raised on ${audit.auditId}`,
+      });
+
+      res.status(201).json({
+        data: { ...request, isRequest: true, emailSent, emailError },
+        error: null,
+      });
       return;
     }
 
