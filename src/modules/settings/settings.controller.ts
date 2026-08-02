@@ -356,14 +356,31 @@ export const deleteControl = async (
       return;
     }
 
-    // A control may have dependent rows (test results, issues with their
-    // actions, test-plan overrides). Remove them in a transaction first so the
-    // delete doesn't fail on a foreign-key constraint.
-    const issues = await prisma.issue.findMany({
-      where: { controlId: id, companyId },
-      select: { id: true },
-    });
+    // A control may have dependent rows: test results, issues with their
+    // actions, test-plan overrides, audits (with their periods, findings and
+    // conversation) and document requests (with their messages). Every one of
+    // these has a foreign key to the control, so they must go first or the
+    // delete fails with a constraint error.
+    const [issues, audits] = await Promise.all([
+      prisma.issue.findMany({
+        where: { controlId: id, companyId },
+        select: { id: true },
+      }),
+      prisma.audit.findMany({
+        where: { controlId: id, companyId },
+        select: { id: true },
+      }),
+    ]);
     const issueIds = issues.map((i) => i.id);
+    const auditIds = audits.map((a) => a.id);
+
+    const auditPeriods = auditIds.length
+      ? await prisma.auditPeriod.findMany({
+          where: { auditId: { in: auditIds } },
+          select: { id: true },
+        })
+      : [];
+    const auditPeriodIds = auditPeriods.map((p) => p.id);
 
     await prisma.$transaction([
       ...(issueIds.length
@@ -374,6 +391,28 @@ export const deleteControl = async (
       prisma.testPlanOverride.deleteMany({
         where: { controlId: id, companyId },
       }),
+      ...(auditPeriodIds.length
+        ? [
+            prisma.auditIssue.deleteMany({
+              where: { auditPeriodId: { in: auditPeriodIds } },
+            }),
+          ]
+        : []),
+      ...(auditIds.length
+        ? [
+            prisma.auditComment.deleteMany({
+              where: { auditId: { in: auditIds } },
+            }),
+            prisma.auditPeriod.deleteMany({
+              where: { auditId: { in: auditIds } },
+            }),
+          ]
+        : []),
+      prisma.audit.deleteMany({ where: { controlId: id, companyId } }),
+      prisma.documentRequestMessage.deleteMany({
+        where: { request: { controlId: id, companyId } },
+      }),
+      prisma.documentRequest.deleteMany({ where: { controlId: id, companyId } }),
       prisma.control.delete({ where: { id } }),
     ]);
 
@@ -474,6 +513,22 @@ export const deleteCountry = async (
 
     if (!existing) {
       res.status(404).json({ data: null, error: "Country not found" });
+      return;
+    }
+
+    // Deleting a country that still holds controls would take every test
+    // result, issue and audit under it with it. Refuse with a clear message
+    // instead of failing on a foreign key and surfacing a 500.
+    const controlCount = await prisma.control.count({
+      where: { countryId: id, companyId },
+    });
+    if (controlCount > 0) {
+      res.status(400).json({
+        data: null,
+        error: `This country still has ${controlCount} control${
+          controlCount > 1 ? "s" : ""
+        }. Delete or move them before removing the country.`,
+      });
       return;
     }
 
