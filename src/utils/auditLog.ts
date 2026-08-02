@@ -14,7 +14,8 @@ interface AuditLogParams {
     | "user"
     | "company"
     | "audit"
-    | "audit_issue";
+    | "audit_issue"
+    | "request";
   entityId: string;
   detail?: string;
 }

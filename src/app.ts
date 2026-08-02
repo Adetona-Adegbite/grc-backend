@@ -17,6 +17,7 @@ import dashboardRoutes from "./modules/dashboard/dashboard.routes";
 import consolidatedRoutes from "./modules/consolidated/consolidated.routes";
 import reportsRoutes from "./modules/reports/reports.routes";
 import auditRoutes from "./modules/audit/audit.routes";
+import requestRoutes from "./modules/requests/requests.routes";
 import calendarRoutes from "./modules/calendar/calendar.routes";
 import uploadRoutes from "./modules/uploads/uploads.routes";
 import path from "path";
@@ -82,6 +83,7 @@ app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/consolidated", consolidatedRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/audit", auditRoutes);
+app.use("/api/requests", requestRoutes);
 app.use("/api/calendar", calendarRoutes);
 app.use("/api/uploads", uploadRoutes);
 
