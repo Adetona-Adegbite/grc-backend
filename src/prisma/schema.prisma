@@ -441,6 +441,9 @@ model DocumentRequest {
   message     String
   dueDate     DateTime?
   status      RequestStatus            @default(open)
+  // Set once the overdue reminder goes out, so restarts or a job running more
+  // than once can never chase the same person twice.
+  reminderSentAt DateTime?
   createdAt   DateTime                 @default(now())
 
   company   Company                  @relation(fields: [companyId], references: [id])
