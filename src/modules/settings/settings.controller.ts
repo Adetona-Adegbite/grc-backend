@@ -3,6 +3,7 @@ import { Request } from "express";
 import { prisma } from "../../config/prisma";
 import { logAudit } from "../../utils/auditLog";
 import {
+  canAccessCountry,
   checkAssignableIn,
   countryScopeWhere,
   getAccessibleCountryIds,
@@ -184,6 +185,11 @@ export const createControl = async (
       return;
     }
 
+    if (!(await canAccessCountry(req, countryId))) {
+      res.status(403).json({ data: null, error: "You don't have access to this country" });
+      return;
+    }
+
     const assignError =
       (await checkAssignableIn(companyId, ownerId, countryId, "Owner")) ??
       (await checkAssignableIn(companyId, testerId, countryId, "Tester"));
@@ -298,15 +304,30 @@ export const updateControl = async (
       return;
     }
 
-    // Owners and testers must work in the country the control ends up in.
     const effectiveCountryId = countryId ?? existing.countryId;
+    if (
+      !(await canAccessCountry(req, existing.countryId)) ||
+      !(await canAccessCountry(req, effectiveCountryId))
+    ) {
+      res.status(404).json({ data: null, error: "Control not found" });
+      return;
+    }
+
+    // Owners and testers must work in the country the control ends up in.
+    // Only people being newly placed on the control are checked, so controls
+    // assigned before countries were separated can still be edited.
+    const countryChanged = effectiveCountryId !== existing.countryId;
     const effectiveOwnerId =
       ownerId !== undefined ? ownerId || null : existing.ownerId;
     const effectiveTesterId =
       testerId !== undefined ? testerId || null : existing.testerId;
     const assignError =
-      (await checkAssignableIn(companyId, effectiveOwnerId, effectiveCountryId, "Owner")) ??
-      (await checkAssignableIn(companyId, effectiveTesterId, effectiveCountryId, "Tester"));
+      (countryChanged || effectiveOwnerId !== existing.ownerId
+        ? await checkAssignableIn(companyId, effectiveOwnerId, effectiveCountryId, "Owner")
+        : null) ??
+      (countryChanged || effectiveTesterId !== existing.testerId
+        ? await checkAssignableIn(companyId, effectiveTesterId, effectiveCountryId, "Tester")
+        : null);
     if (assignError) {
       res.status(400).json({ data: null, error: assignError });
       return;
@@ -398,7 +419,7 @@ export const deleteControl = async (
       where: { id, companyId },
     });
 
-    if (!existing) {
+    if (!existing || !(await canAccessCountry(req, existing.countryId))) {
       res.status(404).json({ data: null, error: "Control not found" });
       return;
     }
@@ -917,7 +938,7 @@ export const reassignOwner = async (
       where: { id, companyId },
     });
 
-    if (!control) {
+    if (!control || !(await canAccessCountry(req, control.countryId))) {
       res.status(404).json({ data: null, error: "Control not found" });
       return;
     }

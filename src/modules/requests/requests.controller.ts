@@ -1,7 +1,11 @@
 import { Response } from "express";
 import { Request } from "express";
 import { prisma } from "../../config/prisma";
-import { countryScopeWhere } from "../../utils/countryAccess";
+import {
+  canAccessCountry,
+  checkAssignableIn,
+  countryScopeWhere,
+} from "../../utils/countryAccess";
 import { logAudit } from "../../utils/auditLog";
 import { sendEmail } from "../../utils/email";
 import {
@@ -112,8 +116,21 @@ export const createRequest = async (
     const control = await prisma.control.findFirst({
       where: { id: String(controlId), companyId },
     });
-    if (!control) {
+    if (!control || !(await canAccessCountry(req, control.countryId))) {
       res.status(404).json({ data: null, error: "Control not found" });
+      return;
+    }
+
+    // Countries are independent: only someone working in the control's
+    // country can be asked for its documents.
+    const recipientError = await checkAssignableIn(
+      companyId,
+      String(recipientId),
+      control.countryId,
+      "Recipient",
+    );
+    if (recipientError) {
+      res.status(400).json({ data: null, error: recipientError });
       return;
     }
 
