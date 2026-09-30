@@ -519,12 +519,18 @@ export const updateAudit = async (
       res.status(400).json({ data: null, error: "auditName cannot be empty" });
       return;
     }
-    const recipientError = await checkAssignableIn(
-      companyId,
-      recipientId ? String(recipientId) : null,
-      existing.countryId,
-      "Recipient",
-    );
+    // Only a newly chosen recipient is checked, so audits addressed before
+    // countries were separated can still be edited.
+    const recipientError =
+      recipientId !== undefined &&
+      (recipientId || null) !== existing.recipientId
+        ? await checkAssignableIn(
+            companyId,
+            recipientId ? String(recipientId) : null,
+            existing.countryId,
+            "Recipient",
+          )
+        : null;
     if (recipientError) {
       res.status(400).json({ data: null, error: recipientError });
       return;

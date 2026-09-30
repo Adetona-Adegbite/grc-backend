@@ -3,6 +3,7 @@ import { Request } from "express";
 import { prisma } from "../../config/prisma";
 import { logAudit } from "../../utils/auditLog";
 import {
+  canAccessCountry,
   checkAssignableIn,
   countryScopeWhere,
   getAccessibleCountryIds,
@@ -123,7 +124,7 @@ export const createControl = async (
       if (allCountries.length === 0) {
         res
           .status(400)
-          .json({ data: null, error: "No countries found for this company" });
+          .json({ data: null, error: "No businesses found for this company" });
         return;
       }
 
@@ -136,7 +137,7 @@ export const createControl = async (
         if (assignError) {
           res.status(400).json({
             data: null,
-            error: `${assignError}. Leave it blank and assign one per country instead.`,
+            error: `${assignError}. Leave it blank and assign one per business instead.`,
           });
           return;
         }
@@ -177,10 +178,15 @@ export const createControl = async (
         action: "Control created",
         entityType: "control",
         entityId: created[0]!.id,
-        detail: `${controlId} — ${name} (all countries)`,
+        detail: `${controlId} — ${name} (all businesses)`,
       });
 
       res.status(201).json({ data: created, error: null });
+      return;
+    }
+
+    if (!(await canAccessCountry(req, countryId))) {
+      res.status(403).json({ data: null, error: "You don't have access to this business" });
       return;
     }
 
@@ -298,15 +304,30 @@ export const updateControl = async (
       return;
     }
 
-    // Owners and testers must work in the country the control ends up in.
     const effectiveCountryId = countryId ?? existing.countryId;
+    if (
+      !(await canAccessCountry(req, existing.countryId)) ||
+      !(await canAccessCountry(req, effectiveCountryId))
+    ) {
+      res.status(404).json({ data: null, error: "Control not found" });
+      return;
+    }
+
+    // Owners and testers must work in the country the control ends up in.
+    // Only people being newly placed on the control are checked, so controls
+    // assigned before countries were separated can still be edited.
+    const countryChanged = effectiveCountryId !== existing.countryId;
     const effectiveOwnerId =
       ownerId !== undefined ? ownerId || null : existing.ownerId;
     const effectiveTesterId =
       testerId !== undefined ? testerId || null : existing.testerId;
     const assignError =
-      (await checkAssignableIn(companyId, effectiveOwnerId, effectiveCountryId, "Owner")) ??
-      (await checkAssignableIn(companyId, effectiveTesterId, effectiveCountryId, "Tester"));
+      (countryChanged || effectiveOwnerId !== existing.ownerId
+        ? await checkAssignableIn(companyId, effectiveOwnerId, effectiveCountryId, "Owner")
+        : null) ??
+      (countryChanged || effectiveTesterId !== existing.testerId
+        ? await checkAssignableIn(companyId, effectiveTesterId, effectiveCountryId, "Tester")
+        : null);
     if (assignError) {
       res.status(400).json({ data: null, error: assignError });
       return;
@@ -398,7 +419,7 @@ export const deleteControl = async (
       where: { id, companyId },
     });
 
-    if (!existing) {
+    if (!existing || !(await canAccessCountry(req, existing.countryId))) {
       res.status(404).json({ data: null, error: "Control not found" });
       return;
     }
@@ -533,7 +554,7 @@ export const createCountry = async (
     if (replicateFromCountryId && !source) {
       res
         .status(404)
-        .json({ data: null, error: "Country to copy controls from not found" });
+        .json({ data: null, error: "Business to copy controls from not found" });
       return;
     }
 
@@ -544,7 +565,7 @@ export const createCountry = async (
     if (existing) {
       res
         .status(409)
-        .json({ data: null, error: "Country code already exists" });
+        .json({ data: null, error: "A business with that code already exists" });
       return;
     }
 
@@ -582,7 +603,7 @@ export const createCountry = async (
     await logAudit({
       companyId,
       userId: req.user!.userId,
-      action: "Country added",
+      action: "Business added",
       entityType: "country",
       entityId: country.id,
       detail: source
@@ -611,7 +632,7 @@ export const deleteCountry = async (
     });
 
     if (!existing) {
-      res.status(404).json({ data: null, error: "Country not found" });
+      res.status(404).json({ data: null, error: "Business not found" });
       return;
     }
 
@@ -624,9 +645,9 @@ export const deleteCountry = async (
     if (controlCount > 0) {
       res.status(400).json({
         data: null,
-        error: `This country still has ${controlCount} control${
+        error: `This business still has ${controlCount} control${
           controlCount > 1 ? "s" : ""
-        }. Delete or move them before removing the country.`,
+        }. Delete or move them before removing the business.`,
       });
       return;
     }
@@ -643,13 +664,13 @@ export const deleteCountry = async (
     await logAudit({
       companyId,
       userId: req.user!.userId,
-      action: "Country deleted",
+      action: "Business deleted",
       entityType: "country",
       entityId: id,
       detail: `${existing.name} — ${existing.code}`,
     });
 
-    res.status(200).json({ data: { message: "Country deleted" }, error: null });
+    res.status(200).json({ data: { message: "Business deleted" }, error: null });
   } catch (error) {
     res.status(500).json({ data: null, error: "Internal server error" });
   }
@@ -917,7 +938,7 @@ export const reassignOwner = async (
       where: { id, companyId },
     });
 
-    if (!control) {
+    if (!control || !(await canAccessCountry(req, control.countryId))) {
       res.status(404).json({ data: null, error: "Control not found" });
       return;
     }
@@ -981,7 +1002,7 @@ export const updateMemberCountries = async (
     ) {
       res
         .status(400)
-        .json({ data: null, error: "countryIds must be a list of country ids" });
+        .json({ data: null, error: "countryIds must be a list of business ids" });
       return;
     }
 
@@ -998,7 +1019,7 @@ export const updateMemberCountries = async (
       where: { companyId, id: { in: ids } },
     });
     if (valid !== ids.length) {
-      res.status(400).json({ data: null, error: "Unknown country" });
+      res.status(400).json({ data: null, error: "Unknown business" });
       return;
     }
 
@@ -1012,10 +1033,10 @@ export const updateMemberCountries = async (
     await logAudit({
       companyId,
       userId: req.user!.userId,
-      action: "Member countries updated",
+      action: "Member businesses updated",
       entityType: "user",
       entityId: id,
-      detail: ids.length ? `Countries: ${ids.length}` : "All countries",
+      detail: ids.length ? `Businesses: ${ids.length}` : "All businesses",
     });
 
     res.status(200).json({ data: { id, countryIds: ids }, error: null });

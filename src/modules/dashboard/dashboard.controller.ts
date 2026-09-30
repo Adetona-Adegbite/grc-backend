@@ -1,7 +1,43 @@
 import { Response } from "express";
 import { Request } from "express";
 import { prisma } from "../../config/prisma";
-import { countryScopeWhere } from "../../utils/countryAccess";
+import {
+  countryScopeWhere,
+  getAccessibleCountryIds,
+  memberCountryMap,
+  sharesCountry,
+  worksIn,
+} from "../../utils/countryAccess";
+
+// Activity from people the viewer shares a country with. The audit log has no
+// country of its own, so a restricted viewer only sees what their own
+// countries' people did, never another country's.
+const visibleActivity = async (
+  companyId: string,
+  viewerAllowed: string[] | null,
+) => {
+  let userIds: string[] | undefined;
+  if (viewerAllowed) {
+    const [members, countryMap] = await Promise.all([
+      prisma.userCompany.findMany({
+        where: { companyId },
+        select: { userId: true, role: true },
+      }),
+      memberCountryMap(companyId),
+    ]);
+    userIds = members
+      .filter((m) =>
+        sharesCountry(m.role, countryMap.get(m.userId), viewerAllowed),
+      )
+      .map((m) => m.userId);
+  }
+  return prisma.auditLog.findMany({
+    where: { companyId, ...(userIds && { userId: { in: userIds } }) },
+    include: { user: { select: { fullName: true, email: true } } },
+    orderBy: { createdAt: "desc" },
+    take: 10,
+  });
+};
 
 export const getDashboard = async (
   req: Request,
@@ -94,12 +130,10 @@ export const getDashboard = async (
         (a: any) => a.dueDate && new Date(a.dueDate) < now,
       ).length;
 
-      const recentActivity = await prisma.auditLog.findMany({
-        where: { companyId },
-        include: { user: { select: { fullName: true, email: true } } },
-        orderBy: { createdAt: "desc" },
-        take: 10,
-      });
+      const recentActivity = await visibleActivity(
+        companyId,
+        await getAccessibleCountryIds(userId, companyId, role),
+      );
 
       res.status(200).json({
         data: {
@@ -415,17 +449,22 @@ export const getDashboard = async (
       select: { dueDate: true },
     });
 
-    const activeUsers = await prisma.userCompany.findMany({
-      where: { companyId },
-      select: { role: true },
-    });
+    // With a country selected, count only the people who work in it.
+    const [members, countryMap] = await Promise.all([
+      prisma.userCompany.findMany({
+        where: { companyId },
+        select: { userId: true, role: true },
+      }),
+      memberCountryMap(companyId),
+    ]);
+    const activeUsers =
+      country_id && country_id !== "all"
+        ? members.filter((m) =>
+            worksIn(m.role, countryMap.get(m.userId), country_id),
+          )
+        : members;
 
-    const recentActivity = await prisma.auditLog.findMany({
-      where: { companyId },
-      include: { user: { select: { fullName: true, email: true } } },
-      orderBy: { createdAt: "desc" },
-      take: 10,
-    });
+    const recentActivity = await visibleActivity(companyId, null);
 
     res.status(200).json({
       data: {

@@ -40,7 +40,7 @@ export const sendInvite = async (
         where: { companyId, id: { in: inviteCountryIds } },
       });
       if (valid !== inviteCountryIds.length) {
-        res.status(400).json({ data: null, error: "Unknown country" });
+        res.status(400).json({ data: null, error: "Unknown business" });
         return;
       }
     }

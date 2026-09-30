@@ -69,6 +69,9 @@ app.use(cookieParser());
 app.use(passport.initialize());
 
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+// The same files under /api, because the production nginx only forwards /api
+// to this server; /uploads there is answered by the frontend instead.
+app.use("/api/files", express.static(path.join(process.cwd(), "uploads")));
 
 app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api/auth", authRoutes);
