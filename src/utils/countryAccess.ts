@@ -106,8 +106,8 @@ export const checkAssignableIn = async (
   const ids = rows.map((r) => r.countryId);
   if (!worksIn(membership.role, ids, countryId)) {
     return ids.length
-      ? `${label} is not assigned to this control's country`
-      : `${label} isn't assigned to any country yet. Assign them under Settings → Team Members first`;
+      ? `${label} is not assigned to this control's business`
+      : `${label} isn't assigned to any business yet. Assign them under Settings → Team Members first`;
   }
   return null;
 };
