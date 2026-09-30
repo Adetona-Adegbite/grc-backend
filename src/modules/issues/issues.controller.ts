@@ -1,6 +1,7 @@
 import { Response } from "express";
 import { Request } from "express";
 import { prisma } from "../../config/prisma";
+import { countryScopeWhere } from "../../utils/countryAccess";
 import { logAudit } from "../../utils/auditLog";
 
 // Based on the MAX existing number (not a count) so deleted issues don't cause
@@ -43,8 +44,7 @@ export const getIssues = async (req: Request, res: Response): Promise<void> => {
       country_id?: string;
       status?: string;
     };
-    const countryWhere =
-      country_id && country_id !== "all" ? { countryId: country_id } : {};
+    const countryWhere = await countryScopeWhere(req, country_id);
 
     if (!country_id) {
       res.status(400).json({ data: null, error: "country_id is required" });

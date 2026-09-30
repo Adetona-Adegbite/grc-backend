@@ -1,6 +1,7 @@
 import { Response } from "express";
 import { Request } from "express";
 import { prisma } from "../../config/prisma";
+import { countryScopeWhere } from "../../utils/countryAccess";
 
 // Helper — checks if a control is due in a given month
 const isControlDue = (
@@ -70,8 +71,7 @@ export const getTestPlan = async (
       country_id?: string;
       month: string;
     };
-    const countryWhere =
-      country_id && country_id !== "all" ? { countryId: country_id } : {};
+    const countryWhere = await countryScopeWhere(req, country_id);
 
     // console.log(companyId, userId, role, country_id, month);
 

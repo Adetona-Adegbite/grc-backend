@@ -12,7 +12,11 @@ export const sendInvite = async (
   try {
     const companyId = req.user!.companyId;
     const invitedBy = req.user!.userId;
-    const { email, role } = req.body as { email: string; role: string };
+    const { email, role, countryIds } = req.body as {
+      email: string;
+      role: string;
+      countryIds?: unknown;
+    };
 
     if (!email || !role) {
       res
@@ -25,6 +29,20 @@ export const sendInvite = async (
     if (!validRoles.includes(role)) {
       res.status(400).json({ data: null, error: "Invalid role" });
       return;
+    }
+
+    // Countries the invitee will work in; none means every country.
+    const inviteCountryIds = Array.isArray(countryIds)
+      ? [...new Set(countryIds.filter((c): c is string => typeof c === "string"))]
+      : [];
+    if (inviteCountryIds.length) {
+      const valid = await prisma.country.count({
+        where: { companyId, id: { in: inviteCountryIds } },
+      });
+      if (valid !== inviteCountryIds.length) {
+        res.status(400).json({ data: null, error: "Unknown country" });
+        return;
+      }
     }
 
     // Check if user is already a member
@@ -62,6 +80,7 @@ export const sendInvite = async (
         companyId,
         email,
         role: role as any,
+        countryIds: inviteCountryIds,
         invitedBy,
         expiresAt,
       },
@@ -198,10 +217,7 @@ export const acceptInvite = async (
         return;
       }
 
-      console.log(password);
-
       const hashedPassword = await hashPassword(password);
-      console.log(hashedPassword);
 
       user = await prisma.user.create({
         data: {
@@ -252,6 +268,22 @@ export const acceptInvite = async (
           role: invite.role,
           invitedBy: invite.invitedBy,
         },
+      });
+    }
+
+    // Countries picked on the invite. Skip any deleted since it was sent.
+    if (!existingLink && invite.countryIds.length) {
+      const stillExists = await prisma.country.findMany({
+        where: { companyId: invite.companyId, id: { in: invite.countryIds } },
+        select: { id: true },
+      });
+      await prisma.memberCountry.createMany({
+        data: stillExists.map((c) => ({
+          companyId: invite.companyId,
+          userId: user.id,
+          countryId: c.id,
+        })),
+        skipDuplicates: true,
       });
     }
 

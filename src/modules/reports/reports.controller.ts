@@ -1,6 +1,7 @@
 import { Response } from "express";
 import { Request } from "express";
 import { prisma } from "../../config/prisma";
+import { countryScopeWhere } from "../../utils/countryAccess";
 
 // Helper — generate recommendations
 const generateRecommendations = (
@@ -41,8 +42,7 @@ export const getMonthlyReport = async (
       country_id?: string;
       month: string;
     };
-    const countryWhere =
-      country_id && country_id !== "all" ? { countryId: country_id } : {};
+    const countryWhere = await countryScopeWhere(req, country_id);
 
     if (!country_id || !month) {
       res

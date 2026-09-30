@@ -16,6 +16,7 @@ import {
   reassignOwner,
   getDomains,
   getCompany,
+  updateMemberCountries,
 } from "./settings.controller";
 
 const router = Router();
@@ -76,6 +77,7 @@ router.put("/company", updateCompany);
 router.get("/company", getCompany);
 
 router.put("/members/:id/role", updateMemberRole);
+router.put("/members/:id/countries", updateMemberCountries);
 router.delete("/members/:id", removeMember);
 
 router.put("/process-owners/:id", reassignOwner);

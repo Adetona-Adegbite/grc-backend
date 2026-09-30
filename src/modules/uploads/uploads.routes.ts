@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
-import { authenticate } from "../../middleware/authenticate";
+import { authenticate, requireRole } from "../../middleware/authenticate";
 import multer from "multer";
+import fs from "fs";
 import { upload } from "../../config/upload";
 
 const router = Router();
@@ -128,6 +129,57 @@ router.post(
       });
     });
   }
+);
+
+// Company logo for the business profile (field: "company_logo"). Images only:
+// the app samples its colours to theme itself.
+const LOGO_TYPES = ["image/png", "image/jpeg", "image/webp"];
+
+router.post(
+  "/company-logo",
+  requireRole("admin"),
+  (req: Request, res: Response, next: NextFunction) => {
+    upload.single("company_logo")(req, res, (err) => {
+      if (err instanceof multer.MulterError) {
+        if (err.code === "LIMIT_FILE_SIZE") {
+          res.status(400).json({
+            data: null,
+            error: "File too large. Maximum size is 10MB",
+          });
+          return;
+        }
+        res.status(400).json({ data: null, error: err.message });
+        return;
+      }
+      if (err) {
+        res.status(400).json({ data: null, error: err.message });
+        return;
+      }
+
+      if (!req.file) {
+        res.status(400).json({ data: null, error: "No file uploaded" });
+        return;
+      }
+      if (!LOGO_TYPES.includes(req.file.mimetype)) {
+        fs.unlink(req.file.path, () => {});
+        res
+          .status(400)
+          .json({ data: null, error: "Logo must be a PNG, JPEG or WebP image" });
+        return;
+      }
+
+      res.status(201).json({
+        data: {
+          url: `/uploads/logos/${req.file.filename}`,
+          filename: req.file.filename,
+          originalName: req.file.originalname,
+          size: req.file.size,
+          mimetype: req.file.mimetype,
+        },
+        error: null,
+      });
+    });
+  },
 );
 
 export default router;

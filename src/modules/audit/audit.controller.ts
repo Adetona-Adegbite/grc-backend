@@ -1,6 +1,14 @@
 import { Response } from "express";
 import { Request } from "express";
 import { prisma } from "../../config/prisma";
+import {
+  checkAssignableIn,
+  countryScopeWhere,
+  getAccessibleCountryIds,
+  memberCountryMap,
+  sharesCountry,
+  worksIn,
+} from "../../utils/countryAccess";
 import { logAudit } from "../../utils/auditLog";
 import { sendEmail } from "../../utils/email";
 import { createDocumentRequest } from "../../utils/documentRequest";
@@ -176,19 +184,25 @@ const getFinancialYearStart = async (companyId: string) => {
   return company?.financialYearStart ?? 1;
 };
 
-// Anyone in the company can be picked as the recipient of an audit request.
+// Anyone working in the audited control's country can be picked as the
+// recipient of an audit request. Pass `country_id` to narrow to one country.
 export const getRecipients = async (
   req: Request,
   res: Response,
 ): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
-    const members = await prisma.userCompany.findMany({
-      where: { companyId },
-      include: {
-        user: { select: { id: true, fullName: true, email: true } },
-      },
-    });
+    const { country_id } = req.query as { country_id?: string };
+    const [members, countryMap, viewerAllowed] = await Promise.all([
+      prisma.userCompany.findMany({
+        where: { companyId },
+        include: {
+          user: { select: { id: true, fullName: true, email: true } },
+        },
+      }),
+      memberCountryMap(companyId),
+      getAccessibleCountryIds(req.user!.userId, companyId, req.user!.role),
+    ]);
 
     res.status(200).json({
       data: members
@@ -197,7 +211,15 @@ export const getRecipients = async (
           fullName: m.user.fullName,
           email: m.user.email,
           role: m.role,
+          countryIds: countryMap.get(m.user.id) ?? [],
         }))
+        .filter((m) => sharesCountry(m.role, m.countryIds, viewerAllowed))
+        .filter(
+          (m) =>
+            !country_id ||
+            country_id === "all" ||
+            worksIn(m.role, m.countryIds, country_id),
+        )
         .sort((a: any, b: any) =>
           (a.fullName ?? a.email).localeCompare(b.fullName ?? b.email),
         ),
@@ -218,8 +240,7 @@ export const getFailedControls = async (
   try {
     const companyId = req.user!.companyId;
     const { country_id } = req.query as { country_id?: string };
-    const countryWhere =
-      country_id && country_id !== "all" ? { countryId: country_id } : {};
+    const countryWhere = await countryScopeWhere(req, country_id);
 
     const controls = await prisma.control.findMany({
       where: {
@@ -273,8 +294,7 @@ export const getAudit = async (req: Request, res: Response): Promise<void> => {
       country_id?: string;
       year?: string;
     };
-    const countryWhere =
-      country_id && country_id !== "all" ? { countryId: country_id } : {};
+    const countryWhere = await countryScopeWhere(req, country_id);
 
     const currentYear = year ? parseInt(year) : new Date().getFullYear();
     const financialYearStart = await getFinancialYearStart(companyId);
@@ -378,17 +398,16 @@ export const createAudit = async (
       return;
     }
 
-    // The recipient may be any user in the company.
-    if (recipientId) {
-      const recipient = await prisma.userCompany.findFirst({
-        where: { userId: String(recipientId), companyId },
-      });
-      if (!recipient) {
-        res
-          .status(400)
-          .json({ data: null, error: "Recipient is not a member of this company" });
-        return;
-      }
+    // The recipient may be anyone working in the control's country.
+    const recipientError = await checkAssignableIn(
+      companyId,
+      recipientId ? String(recipientId) : null,
+      control.countryId,
+      "Recipient",
+    );
+    if (recipientError) {
+      res.status(400).json({ data: null, error: recipientError });
+      return;
     }
 
     let created: any;
@@ -498,6 +517,16 @@ export const updateAudit = async (
 
     if (auditName !== undefined && !String(auditName).trim()) {
       res.status(400).json({ data: null, error: "auditName cannot be empty" });
+      return;
+    }
+    const recipientError = await checkAssignableIn(
+      companyId,
+      recipientId ? String(recipientId) : null,
+      existing.countryId,
+      "Recipient",
+    );
+    if (recipientError) {
+      res.status(400).json({ data: null, error: recipientError });
       return;
     }
     if (startMonth !== undefined && !PERIOD_RE.test(String(startMonth))) {

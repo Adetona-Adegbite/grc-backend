@@ -1,6 +1,7 @@
 import { Response } from "express";
 import { Request } from "express";
 import { prisma } from "../../config/prisma";
+import { countryScopeWhere } from "../../utils/countryAccess";
 
 export const getDashboard = async (
   req: Request,
@@ -11,8 +12,7 @@ export const getDashboard = async (
     const userId = req.user!.userId;
     const role = req.user!.role;
     const { country_id } = req.query as { country_id?: string };
-    const countryWhere =
-      country_id && country_id !== "all" ? { countryId: country_id } : {};
+    const countryWhere = await countryScopeWhere(req, country_id);
     const now = new Date();
     const period = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(
       2,

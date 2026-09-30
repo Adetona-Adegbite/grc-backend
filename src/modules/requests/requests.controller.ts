@@ -1,6 +1,7 @@
 import { Response } from "express";
 import { Request } from "express";
 import { prisma } from "../../config/prisma";
+import { countryScopeWhere } from "../../utils/countryAccess";
 import { logAudit } from "../../utils/auditLog";
 import { sendEmail } from "../../utils/email";
 import {
@@ -57,8 +58,7 @@ export const getRequests = async (
       country_id?: string;
       status?: string;
     };
-    const countryWhere =
-      country_id && country_id !== "all" ? { countryId: country_id } : {};
+    const countryWhere = await countryScopeWhere(req, country_id);
     const statusWhere =
       status && status !== "all" ? { status: status as any } : {};
 
