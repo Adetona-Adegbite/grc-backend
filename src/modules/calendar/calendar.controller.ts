@@ -1,5 +1,6 @@
 import { Response, Request } from "express";
 import { prisma } from "../../config/prisma";
+import { countryScopeWhere } from "../../utils/countryAccess";
 import {
   MONTH_NAMES,
   isControlDueInMonth,
@@ -16,8 +17,7 @@ export const getCalendar = async (
       country_id?: string;
       year?: string;
     };
-    const countryWhere =
-      country_id && country_id !== "all" ? { countryId: country_id } : {};
+    const countryWhere = await countryScopeWhere(req, country_id);
 
     if (!country_id) {
       res.status(400).json({ data: null, error: "country_id is required" });

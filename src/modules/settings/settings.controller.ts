@@ -2,6 +2,14 @@ import { Response } from "express";
 import { Request } from "express";
 import { prisma } from "../../config/prisma";
 import { logAudit } from "../../utils/auditLog";
+import {
+  checkAssignableIn,
+  countryScopeWhere,
+  getAccessibleCountryIds,
+  memberCountryMap,
+  sharesCountry,
+  worksIn,
+} from "../../utils/countryAccess";
 
 const VALID_DOMAINS = [
   "Fixed Asset",
@@ -28,9 +36,11 @@ export const getControls = async (
 ): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
+    const { country_id } = req.query as { country_id?: string };
+    const countryWhere = await countryScopeWhere(req, country_id);
 
     const controls = await prisma.control.findMany({
-      where: { companyId },
+      where: { companyId, ...countryWhere },
       include: {
         owner: { select: { id: true, fullName: true, email: true } },
         tester: { select: { id: true, fullName: true, email: true } },
@@ -117,6 +127,21 @@ export const createControl = async (
         return;
       }
 
+      // Countries are independent, so an owner/tester applied to every
+      // country must work in every country.
+      for (const country of allCountries) {
+        const assignError =
+          (await checkAssignableIn(companyId, ownerId, country.id, "Owner")) ??
+          (await checkAssignableIn(companyId, testerId, country.id, "Tester"));
+        if (assignError) {
+          res.status(400).json({
+            data: null,
+            error: `${assignError}. Leave it blank and assign one per country instead.`,
+          });
+          return;
+        }
+      }
+
       const created = await Promise.all(
         allCountries.map((country: { id: string }, index: number) =>
           prisma.control.create({
@@ -156,6 +181,14 @@ export const createControl = async (
       });
 
       res.status(201).json({ data: created, error: null });
+      return;
+    }
+
+    const assignError =
+      (await checkAssignableIn(companyId, ownerId, countryId, "Owner")) ??
+      (await checkAssignableIn(companyId, testerId, countryId, "Tester"));
+    if (assignError) {
+      res.status(400).json({ data: null, error: assignError });
       return;
     }
 
@@ -262,6 +295,20 @@ export const updateControl = async (
 
     if (!existing) {
       res.status(404).json({ data: null, error: "Control not found" });
+      return;
+    }
+
+    // Owners and testers must work in the country the control ends up in.
+    const effectiveCountryId = countryId ?? existing.countryId;
+    const effectiveOwnerId =
+      ownerId !== undefined ? ownerId || null : existing.ownerId;
+    const effectiveTesterId =
+      testerId !== undefined ? testerId || null : existing.testerId;
+    const assignError =
+      (await checkAssignableIn(companyId, effectiveOwnerId, effectiveCountryId, "Owner")) ??
+      (await checkAssignableIn(companyId, effectiveTesterId, effectiveCountryId, "Tester"));
+    if (assignError) {
+      res.status(400).json({ data: null, error: assignError });
       return;
     }
 
@@ -446,8 +493,13 @@ export const getCountries = async (
 ): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
+    const allowed = await getAccessibleCountryIds(
+      req.user!.userId,
+      companyId,
+      req.user!.role,
+    );
     const countries = await prisma.country.findMany({
-      where: { companyId },
+      where: { companyId, ...(allowed && { id: { in: allowed } }) },
       orderBy: { name: "asc" },
     });
     res.status(200).json({ data: countries, error: null });
@@ -462,10 +514,26 @@ export const createCountry = async (
 ): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
-    const { name, code } = req.body;
+    const { name, code, replicateFromCountryId } = req.body as {
+      name?: string;
+      code?: string;
+      replicateFromCountryId?: string;
+    };
 
     if (!name || !code) {
       res.status(400).json({ data: null, error: "Name and code are required" });
+      return;
+    }
+
+    const source = replicateFromCountryId
+      ? await prisma.country.findFirst({
+          where: { id: replicateFromCountryId, companyId },
+        })
+      : null;
+    if (replicateFromCountryId && !source) {
+      res
+        .status(404)
+        .json({ data: null, error: "Country to copy controls from not found" });
       return;
     }
 
@@ -480,9 +548,36 @@ export const createCountry = async (
       return;
     }
 
-    const country = await prisma.country.create({
-      data: { companyId, name, code },
-    });
+    // Only the control definitions are copied. Countries are independent, so
+    // owners, testers, due dates, results, issues and audits all start empty
+    // and the new country fills them in itself.
+    const { country, replicatedControls } = await prisma.$transaction(
+      async (tx) => {
+        const country = await tx.country.create({
+          data: { companyId, name, code },
+        });
+        if (!source) return { country, replicatedControls: 0 };
+
+        const sourceControls = await tx.control.findMany({
+          where: { companyId, countryId: source.id },
+        });
+        await tx.control.createMany({
+          data: sourceControls.map((c) => ({
+            companyId,
+            countryId: country.id,
+            controlId: c.controlId,
+            name: c.name,
+            description: c.description,
+            domain: c.domain,
+            risk: c.risk,
+            frequency: c.frequency,
+            nature: c.nature,
+            type: c.type,
+          })),
+        });
+        return { country, replicatedControls: sourceControls.length };
+      },
+    );
 
     await logAudit({
       companyId,
@@ -490,10 +585,14 @@ export const createCountry = async (
       action: "Country added",
       entityType: "country",
       entityId: country.id,
-      detail: `${country.name} — ${country.code}`,
+      detail: source
+        ? `${country.name} — ${country.code} (${replicatedControls} controls copied from ${source.name})`
+        : `${country.name} — ${country.code}`,
     });
 
-    res.status(201).json({ data: country, error: null });
+    res
+      .status(201)
+      .json({ data: { ...country, replicatedControls }, error: null });
   } catch (error) {
     res.status(500).json({ data: null, error: "Internal server error" });
   }
@@ -532,7 +631,14 @@ export const deleteCountry = async (
       return;
     }
 
-    await prisma.country.delete({ where: { id } });
+    await prisma.$transaction([
+      prisma.memberCountry.deleteMany({ where: { countryId: id, companyId } }),
+      prisma.invite.updateMany({
+        where: { companyId, countryIds: { has: id } },
+        data: { countryIds: { set: [] } },
+      }),
+      prisma.country.delete({ where: { id } }),
+    ]);
 
     await logAudit({
       companyId,
@@ -612,31 +718,47 @@ export const getMembers = async (
 ): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
+    const { country_id } = req.query as { country_id?: string };
 
-    const members = await prisma.userCompany.findMany({
-      where: { companyId },
-      include: {
-        user: {
-          select: {
-            id: true,
-            fullName: true,
-            email: true,
-            avatarUrl: true,
-            createdAt: true,
+    const [members, countryMap, viewerAllowed] = await Promise.all([
+      prisma.userCompany.findMany({
+        where: { companyId },
+        include: {
+          user: {
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+              avatarUrl: true,
+              createdAt: true,
+            },
           },
         },
-      },
-      orderBy: { joinedAt: "asc" },
-    });
+        orderBy: { joinedAt: "asc" },
+      }),
+      memberCountryMap(companyId),
+      getAccessibleCountryIds(req.user!.userId, companyId, req.user!.role),
+    ]);
 
-    const data = members.map((m: any) => ({
-      id: m.user.id,
-      fullName: m.user.fullName,
-      email: m.user.email,
-      avatarUrl: m.user.avatarUrl,
-      role: m.role,
-      joinedAt: m.joinedAt,
-    }));
+    // A restricted viewer never sees people who work only in other countries.
+    const data = members
+      .map((m: any) => ({
+        id: m.user.id,
+        fullName: m.user.fullName,
+        email: m.user.email,
+        avatarUrl: m.user.avatarUrl,
+        role: m.role,
+        joinedAt: m.joinedAt,
+        // Empty means the member works in every country.
+        countryIds: countryMap.get(m.user.id) ?? [],
+      }))
+      .filter((m) => sharesCountry(m.role, m.countryIds, viewerAllowed))
+      .filter(
+        (m) =>
+          !country_id ||
+          country_id === "all" ||
+          worksIn(m.role, m.countryIds, country_id),
+      );
 
     res.status(200).json({ data, error: null });
   } catch (error) {
@@ -722,7 +844,10 @@ export const removeMember = async (
       return;
     }
 
-    await prisma.userCompany.delete({ where: { id: existing.id } });
+    await prisma.$transaction([
+      prisma.memberCountry.deleteMany({ where: { userId: id, companyId } }),
+      prisma.userCompany.delete({ where: { id: existing.id } }),
+    ]);
 
     await logAudit({
       companyId,
@@ -747,9 +872,10 @@ export const getProcessOwners = async (
 ): Promise<void> => {
   try {
     const companyId = req.user!.companyId;
+    const countryWhere = await countryScopeWhere(req);
 
     const controls = await prisma.control.findMany({
-      where: { companyId },
+      where: { companyId, ...countryWhere },
       include: {
         owner: { select: { id: true, fullName: true, email: true } },
         country: { select: { id: true, name: true, code: true } },
@@ -805,6 +931,17 @@ export const reassignOwner = async (
       return;
     }
 
+    const assignError = await checkAssignableIn(
+      companyId,
+      ownerId,
+      control.countryId,
+      "Owner",
+    );
+    if (assignError) {
+      res.status(400).json({ data: null, error: assignError });
+      return;
+    }
+
     const updated = await prisma.control.update({
       where: { id },
       data: { ownerId },
@@ -821,6 +958,67 @@ export const reassignOwner = async (
     });
 
     res.status(200).json({ data: updated, error: null });
+  } catch (error) {
+    res.status(500).json({ data: null, error: "Internal server error" });
+  }
+};
+
+// ─── Member countries ───────────────────────────────────────────
+
+// Sets the countries a member works in. An empty list makes them unrestricted.
+export const updateMemberCountries = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const companyId = req.user!.companyId;
+    const { id } = req.params as { id: string };
+    const { countryIds } = req.body as { countryIds?: unknown };
+
+    if (
+      !Array.isArray(countryIds) ||
+      !countryIds.every((c) => typeof c === "string")
+    ) {
+      res
+        .status(400)
+        .json({ data: null, error: "countryIds must be a list of country ids" });
+      return;
+    }
+
+    const member = await prisma.userCompany.findFirst({
+      where: { userId: id, companyId },
+    });
+    if (!member) {
+      res.status(404).json({ data: null, error: "Member not found" });
+      return;
+    }
+
+    const ids = [...new Set(countryIds as string[])];
+    const valid = await prisma.country.count({
+      where: { companyId, id: { in: ids } },
+    });
+    if (valid !== ids.length) {
+      res.status(400).json({ data: null, error: "Unknown country" });
+      return;
+    }
+
+    await prisma.$transaction([
+      prisma.memberCountry.deleteMany({ where: { userId: id, companyId } }),
+      prisma.memberCountry.createMany({
+        data: ids.map((countryId) => ({ companyId, userId: id, countryId })),
+      }),
+    ]);
+
+    await logAudit({
+      companyId,
+      userId: req.user!.userId,
+      action: "Member countries updated",
+      entityType: "user",
+      entityId: id,
+      detail: ids.length ? `Countries: ${ids.length}` : "All countries",
+    });
+
+    res.status(200).json({ data: { id, countryIds: ids }, error: null });
   } catch (error) {
     res.status(500).json({ data: null, error: "Internal server error" });
   }

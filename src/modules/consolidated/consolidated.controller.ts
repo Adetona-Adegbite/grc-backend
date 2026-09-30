@@ -1,6 +1,7 @@
 import { Response } from "express";
 import { Request } from "express";
 import { prisma } from "../../config/prisma";
+import { getAccessibleCountryIds } from "../../utils/countryAccess";
 
 export const getConsolidated = async (
   req: Request,
@@ -19,9 +20,14 @@ export const getConsolidated = async (
       period ||
       `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
-    // Get all countries for this company
+    // Every country the viewer works in (all of them unless restricted)
+    const allowed = await getAccessibleCountryIds(
+      req.user!.userId,
+      companyId,
+      req.user!.role,
+    );
     const countries = await prisma.country.findMany({
-      where: { companyId },
+      where: { companyId, ...(allowed && { id: { in: allowed } }) },
       orderBy: { name: "asc" },
     });
 

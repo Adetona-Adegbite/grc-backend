@@ -35,6 +35,7 @@ model User {
   requestsMade      DocumentRequest[]  @relation("RequestRequester")
   requestsReceived  DocumentRequest[]  @relation("RequestRecipient")
   requestMessages   DocumentRequestMessage[] @relation("RequestMessageAuthor")
+  memberCountries   MemberCountry[]
 
   @@map("users")
 }
@@ -46,6 +47,20 @@ model Company {
   ownerId            String
   financialYearStart Int      @default(1)
   createdAt          DateTime @default(now())
+
+  // Business profile, completed by the admin when the company first signs in.
+  registrationNumber String?
+  address            String?
+  country            String?
+  logoUrl            String?
+  // Hex colour picked from the logo; the app re-themes itself with it.
+  brandColor         String?
+
+  // The app stays locked behind the billing screen until this is "active".
+  subscriptionStatus      SubscriptionStatus @default(unpaid)
+  subscriptionPlan        String?
+  billingCycle            String?
+  subscriptionActivatedAt DateTime?
 
   owner             User               @relation("CompanyOwner", fields: [ownerId], references: [id])
   userCompanies     UserCompany[]
@@ -63,8 +78,15 @@ model Company {
   auditComments     AuditComment[]
   documentRequests  DocumentRequest[]
   requestMessages   DocumentRequestMessage[]
+  memberCountries   MemberCountry[]
 
   @@map("companies")
+}
+
+enum SubscriptionStatus {
+  unpaid
+  pending
+  active
 }
 
 model UserCompany {
@@ -80,6 +102,25 @@ model UserCompany {
 
   @@unique([userId, companyId])
   @@map("user_company")
+}
+
+// The countries a member works in. Each country is run independently, so a
+// non-admin assigned here only sees those countries, and only people sharing a
+// country with them. A non-admin with no rows is unrestricted (every member
+// predates country assignment), and admins always see every country.
+model MemberCountry {
+  id        String   @id @default(uuid())
+  companyId String
+  userId    String
+  countryId String
+  createdAt DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+  country Country @relation(fields: [countryId], references: [id])
+
+  @@unique([userId, countryId])
+  @@map("member_countries")
 }
 
 enum Role {
@@ -102,6 +143,7 @@ model Country {
   issues      Issue[]
   audits      Audit[]
   documentRequests DocumentRequest[]
+  members     MemberCountry[]
 
   @@unique([companyId, code])
   @@map("countries")
@@ -210,6 +252,8 @@ model Invite {
   companyId String
   email     String
   role      Role
+  // Countries the invitee will be assigned to on accepting.
+  countryIds String[]    @default([])
   token     String       @unique @default(uuid())
   status    InviteStatus @default(pending)
   invitedBy String

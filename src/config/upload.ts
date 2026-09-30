@@ -10,6 +10,7 @@ if (!fs.existsSync(uploadDir)) {
 const getDestination = (fieldname: string): string => {
   if (fieldname === "test_evidence") return path.join(uploadDir, "tests");
   if (fieldname === "issue_evidence") return path.join(uploadDir, "issues");
+  if (fieldname === "company_logo") return path.join(uploadDir, "logos");
   return uploadDir;
 };
 
