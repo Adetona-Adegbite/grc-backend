@@ -52,7 +52,6 @@ model Company {
   registrationNumber String?
   address            String?
   country            String?
-  currency           String?
   logoUrl            String?
   // Hex colour picked from the logo; the app re-themes itself with it.
   brandColor         String?

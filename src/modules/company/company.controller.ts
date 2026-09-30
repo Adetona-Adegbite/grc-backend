@@ -83,7 +83,6 @@ const PROFILE_SELECT = {
   registrationNumber: true,
   address: true,
   country: true,
-  currency: true,
   logoUrl: true,
   brandColor: true,
   subscriptionStatus: true,
@@ -99,7 +98,7 @@ const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 const shapeProfile = (company: any) => ({
   ...company,
   profileComplete: Boolean(
-    company.name?.trim() && company.currency?.trim() && company.logoUrl,
+    company.name?.trim() && company.logoUrl,
   ),
 });
 
@@ -135,17 +134,12 @@ export const updateCompanyProfile = async (
       registrationNumber,
       address,
       country,
-      currency,
       logoUrl,
       brandColor,
     } = req.body as Record<string, string | null | undefined>;
 
     if (name !== undefined && !String(name ?? "").trim()) {
       res.status(400).json({ data: null, error: "Business name is required" });
-      return;
-    }
-    if (currency !== undefined && !String(currency ?? "").trim()) {
-      res.status(400).json({ data: null, error: "Currency is required" });
       return;
     }
     if (brandColor && !HEX_RE.test(brandColor)) {
@@ -172,9 +166,6 @@ export const updateCompanyProfile = async (
         }),
         ...(address !== undefined && { address: trimOrNull(address) }),
         ...(country !== undefined && { country: trimOrNull(country) }),
-        ...(currency !== undefined && {
-          currency: String(currency).trim().toUpperCase(),
-        }),
         ...(logoUrl !== undefined && { logoUrl: logoUrl || null }),
         ...(brandColor !== undefined && {
           brandColor: brandColor ? brandColor.toLowerCase() : null,
